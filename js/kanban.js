@@ -1,133 +1,135 @@
-// ========== КАНБАН ==========
-
-let kanbanSortables = {};
-
-// ========== КАНБАН ==========
-
+// Загрузка канбана
 async function loadKanban() {
     try {
-        let url = `${API_URL}/tasks/`;
-        const params = new URLSearchParams();
+        const tasks = await TaskAPI.getAll();
         
-        const projectFilter = document.getElementById('kanbanFilterProject')?.value;
-        const subprojectFilter = document.getElementById('kanbanFilterSubproject')?.value;
-        const priorityFilter = document.getElementById('kanbanFilterPriority')?.value;
+        // Применяем фильтры
+        const filterProject = document.getElementById('kanbanFilterProject')?.value || '';
+        const filterSubproject = document.getElementById('kanbanFilterSubproject')?.value || '';
+        const filterPriority = document.getElementById('kanbanFilterPriority')?.value || '';
         
-        if (projectFilter) params.append('project', projectFilter);
-        if (subprojectFilter) params.append('subproject', subprojectFilter);
-        if (priorityFilter) params.append('priority', priorityFilter);
+        let filtered = tasks;
         
-        if (params.toString()) url += `?${params.toString()}`;
+        if (filterProject) {
+            filtered = filtered.filter(t => t.project_id == filterProject);
+        }
+        if (filterSubproject) {
+            filtered = filtered.filter(t => t.subproject_id == filterSubproject);
+        }
+        if (filterPriority) {
+            filtered = filtered.filter(t => t.priority === filterPriority);
+        }
         
-        const response = await fetch(url, {
-            headers: { 'X-Telegram-Init-Data': getInitData() }
-        });
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const tasks = await response.json();
-        renderKanban(tasks);
-        updateKanbanProjectFilters();
+        renderKanban(filtered);
+        await updateKanbanFilters();
     } catch (error) {
         console.error('Ошибка загрузки канбана:', error);
-        showError('Не удалось загрузить канбан');
+        showNotification('Ошибка загрузки канбана', 'error');
     }
 }
 
+// Отрисовка канбана
 function renderKanban(tasks) {
-    const columns = {
-        'todo': [],
-        'in_progress': [],
-        'done': []
-    };
+    const todoTasks = tasks.filter(t => t.status === 'todo');
+    const inProgressTasks = tasks.filter(t => t.status === 'in_progress');
+    const doneTasks = tasks.filter(t => t.status === 'done');
     
-    tasks.forEach(task => {
-        let status = task.status || 'todo';
-        if (task.completed && status !== 'done') {
-            status = 'done';
-        }
-        
-        if (columns[status]) {
-            columns[status].push(task);
-        }
-    });
+    document.getElementById('kanban-todo-count').textContent = todoTasks.length;
+    document.getElementById('kanban-progress-count').textContent = inProgressTasks.length;
+    document.getElementById('kanban-done-count').textContent = doneTasks.length;
     
-    // Обновить счётчики
-    document.getElementById('kanban-todo-count').textContent = columns.todo.length;
-    document.getElementById('kanban-progress-count').textContent = columns.in_progress.length;
-    document.getElementById('kanban-done-count').textContent = columns.done.length;
+    renderKanbanColumn('kanban-todo', todoTasks);
+    renderKanbanColumn('kanban-in_progress', inProgressTasks);
+    renderKanbanColumn('kanban-done', doneTasks);
+}
+
+// Отрисовка колонки канбана
+function renderKanbanColumn(columnId, tasks) {
+    const container = document.getElementById(columnId);
     
-    // Рендер колонок
-    Object.keys(columns).forEach(status => {
-        const container = document.getElementById(`kanban-${status}`);
-        
-        if (columns[status].length === 0) {
-            container.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Нет задач</p>';
-            return;
-        }
-        
-        const priorityColors = {
-            high: 'border-l-red-500',
-            medium: 'border-l-yellow-500',
-            low: 'border-l-green-500'
-        };
-        
-        container.innerHTML = columns[status].map(task => `
-            <div class="bg-white rounded-lg p-3 shadow-sm border-l-4 ${priorityColors[task.priority]} cursor-pointer hover:shadow-md transition-shadow" data-task-id="${task.id}">
-                <p class="font-medium text-sm text-gray-800 mb-1" onclick="openEditTaskModal(${task.id})">
-                    ${escapeHtml(task.title)}
-                </p>
-                ${task.project_name ? `<p class="text-xs text-gray-500">📁 ${escapeHtml(task.project_name)}</p>` : ''}
-                ${task.subproject_name ? `<p class="text-xs text-gray-500">👤 ${escapeHtml(task.subproject_name)}</p>` : ''}
-                ${task.deadline ? `<p class="text-xs text-gray-500 mt-1">⏰ ${formatDeadline(task.deadline, task.is_overdue)}</p>` : ''}
+    if (!tasks || tasks.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-400 text-sm py-4">Нет задач</p>';
+        return;
+    }
+    
+    container.innerHTML = tasks.map(task => `
+        <div class="bg-white border rounded-lg p-3 cursor-move hover:shadow-md transition-shadow" draggable="true" ondragstart="dragStart(event, ${task.id})" ondragend="dragEnd(event)">
+            <div class="flex items-start justify-between mb-2">
+                <h4 class="font-medium text-sm text-gray-800 flex-1">${task.title}</h4>
+                <div class="flex gap-1">
+                    ${task.priority === 'high' ? '<span class="text-red-500">🔴</span>' : ''}
+                    ${task.priority === 'medium' ? '<span class="text-yellow-500">🟡</span>' : ''}
+                    ${task.priority === 'low' ? '<span class="text-green-500">🟢</span>' : ''}
+                </div>
             </div>
-        `).join('');
-    });
-    
-    initKanbanSortable();
+            ${task.deadline ? `<p class="text-xs text-gray-500">📅 ${new Date(task.deadline).toLocaleDateString('ru-RU')}</p>` : ''}
+        </div>
+    `).join('');
 }
 
-function initKanbanSortable() {
-    const columns = ['todo', 'in_progress', 'done'];
-    
-    columns.forEach(status => {
-        const container = document.getElementById(`kanban-${status}`);
+// Обновить фильтры канбана
+async function updateKanbanFilters() {
+    try {
+        const projects = await ProjectAPI.getAll();
         
-        Sortable.create(container, {
-            group: 'kanban',
-            animation: 150,
-            ghostClass: 'sortable-ghost',
-            onEnd: async function(evt) {
-                const taskId = evt.item.dataset.taskId;
-                const newStatus = evt.to.id.replace('kanban-', '');
-                
-                try {
-                    const response = await fetch(`${API_URL}/tasks/${taskId}/`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-Telegram-Init-Data': getInitData()
-                        },
-                        body: JSON.stringify({ 
-                            status: newStatus,
-                            completed: newStatus === 'done'
-                        })
-                    });
-                    
-                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                    
-                    await loadKanban();
-                    hapticFeedback('light');
-                } catch (error) {
-                    console.error('Ошибка обновления статуса:', error);
-                    showError('Не удалось обновить статус');
-                    await loadKanban();
-                }
-            }
-        });
-    });
+        const projectSelect = document.getElementById('kanbanFilterProject');
+        if (projectSelect) {
+            const currentValue = projectSelect.value;
+            const defaultOption = projectSelect.querySelector('option[value=""]');
+            
+            projectSelect.innerHTML = '';
+            if (defaultOption) projectSelect.appendChild(defaultOption.cloneNode(true));
+            
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = `${project.icon} ${project.name}`;
+                projectSelect.appendChild(option);
+            });
+            
+            projectSelect.value = currentValue;
+        }
+    } catch (error) {
+        console.error('Ошибка обновления фильтров:', error);
+    }
 }
 
+// Drag & Drop
+let draggedTaskId = null;
+
+function dragStart(event, taskId) {
+    draggedTaskId = taskId;
+    event.target.style.opacity = '0.5';
+}
+
+function dragEnd(event) {
+    event.target.style.opacity = '1';
+}
+
+// Разрешить drop
+function allowDrop(event) {
+    event.preventDefault();
+}
+
+// Drop задачи
+async function dropTask(event, newStatus) {
+    event.preventDefault();
+    
+    if (!draggedTaskId) return;
+    
+    try {
+        await TaskAPI.update(draggedTaskId, { status: newStatus });
+        showNotification('Статус обновлён', 'success');
+        await loadKanban();
+    } catch (error) {
+        console.error('Ошибка обновления статуса:', error);
+        showNotification('Ошибка обновления статуса', 'error');
+    }
+    
+    draggedTaskId = null;
+}
+
+// Показать/скрыть фильтры
 function toggleKanbanFilters() {
     const container = document.getElementById('kanbanFiltersContainer');
     const icon = document.getElementById('kanbanFilterIcon');
@@ -141,6 +143,7 @@ function toggleKanbanFilters() {
     }
 }
 
+// Очистить фильтры
 function clearKanbanFilters() {
     document.getElementById('kanbanFilterProject').value = '';
     document.getElementById('kanbanFilterSubproject').value = '';
@@ -148,44 +151,16 @@ function clearKanbanFilters() {
     loadKanban();
 }
 
-async function updateKanbanProjectFilters() {
-    try {
-        const [projectsRes, subprojectsRes] = await Promise.all([
-            fetch(`${API_URL}/projects/`, {
-                headers: { 'X-Telegram-Init-Data': getInitData() }
-            }),
-            // Получить все подпроекты из всех проектов
-            fetch(`${API_URL}/projects/`, {
-                headers: { 'X-Telegram-Init-Data': getInitData() }
-            })
-        ]);
-        
-        const projects = await projectsRes.json();
-        
-        // Обновить фильтр проектов
-        const projectSelect = document.getElementById('kanbanFilterProject');
-        if (projectSelect) {
-            const currentValue = projectSelect.value;
-            projectSelect.innerHTML = '<option value="">📁 Все проекты</option>' + 
-                projects.map(p => `<option value="${p.id}">${p.icon} ${escapeHtml(p.name)}</option>`).join('');
-            projectSelect.value = currentValue;
+// Добавить drop zones для колонок
+document.addEventListener('DOMContentLoaded', () => {
+    const columns = ['kanban-todo', 'kanban-in_progress', 'kanban-done'];
+    const statuses = ['todo', 'in_progress', 'done'];
+    
+    columns.forEach((columnId, index) => {
+        const column = document.getElementById(columnId);
+        if (column) {
+            column.parentElement.addEventListener('dragover', allowDrop);
+            column.parentElement.addEventListener('drop', (e) => dropTask(e, statuses[index]));
         }
-        
-        // Получить подпроекты выбранного проекта
-        const selectedProject = document.getElementById('kanbanFilterProject')?.value;
-        if (selectedProject) {
-            const subprojectsRes = await fetch(`${API_URL}/projects/${selectedProject}/subprojects/`, {
-                headers: { 'X-Telegram-Init-Data': getInitData() }
-            });
-            const subprojects = await subprojectsRes.json();
-            
-            const subprojectSelect = document.getElementById('kanbanFilterSubproject');
-            if (subprojectSelect) {
-                subprojectSelect.innerHTML = '<option value="">👤 Все подпроекты</option>' + 
-                    subprojects.map(sp => `<option value="${sp.id}">${sp.icon} ${escapeHtml(sp.name)}</option>`).join('');
-            }
-        }
-    } catch (error) {
-        console.error('Ошибка загрузки фильтров:', error);
-    }
-}
+    });
+});
