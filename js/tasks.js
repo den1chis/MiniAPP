@@ -116,7 +116,11 @@ async function toggleTask(id) {
         const task = tasks.find(t => t.id === id);
         
         if (task) {
-            await TaskAPI.update(id, { completed: !task.completed });
+            const newCompleted = !task.completed;
+            await TaskAPI.update(id, { 
+                completed: newCompleted,
+                completed_at: newCompleted ? new Date().toISOString() : null
+            });
             await loadTasks();
         }
     } catch (error) {

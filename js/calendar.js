@@ -1,135 +1,169 @@
-// ========== КАЛЕНДАРЬ ==========
+// Текущий месяц и год
+let currentMonth = new Date().getMonth();
+let currentYear = new Date().getFullYear();
 
-function loadCalendar() {
-    renderCalendar();
-    updateCalendarProjectFilter();
+// Загрузка календаря
+async function loadCalendar() {
+    await updateCalendarProjectFilter();
+    await renderCalendar();
 }
 
+// Обновить фильтр проектов
 async function updateCalendarProjectFilter() {
     try {
-        const response = await fetch(`${API_URL}/projects/`, {
-            headers: { 'X-Telegram-Init-Data': getInitData() }
+        const projects = await ProjectAPI.getAll();
+        
+        const select = document.getElementById('calendarFilterProject');
+        if (!select) return;
+        
+        const currentValue = select.value;
+        const defaultOption = select.querySelector('option[value=""]');
+        
+        select.innerHTML = '';
+        if (defaultOption) select.appendChild(defaultOption.cloneNode(true));
+        
+        projects.forEach(project => {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = `${project.icon} ${project.name}`;
+            select.appendChild(option);
         });
         
-        if (!response.ok) return;
-        
-        const projects = await response.json();
-        const select = document.getElementById('calendarFilterProject');
-        
-        if (select) {
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">Все проекты</option>' + 
-                projects.map(p => `<option value="${p.id}">${p.icon} ${escapeHtml(p.name)}</option>`).join('');
-            select.value = currentValue;
-        }
+        select.value = currentValue;
     } catch (error) {
         console.error('Ошибка загрузки проектов для календаря:', error);
     }
 }
 
-function renderCalendar() {
-    const year = currentCalendarDate.getFullYear();
-    const month = currentCalendarDate.getMonth();
+// Отрисовка календаря
+async function renderCalendar() {
+    // Обновить заголовок
+    const monthNames = [
+        'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'
+    ];
+    document.getElementById('calendarMonth').textContent = `${monthNames[currentMonth]} ${currentYear}`;
     
-    const monthNames = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-                        'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
-    
-    document.getElementById('calendarMonth').textContent = `${monthNames[month]} ${year}`;
-    
-    const firstDay = new Date(year, month, 1);
-    const lastDay = new Date(year, month + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    
-    let firstDayOfWeek = firstDay.getDay();
-    firstDayOfWeek = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
-    
-    const calendarGrid = document.getElementById('calendarGrid');
-    
-    while (calendarGrid.children.length > 7) {
-        calendarGrid.removeChild(calendarGrid.lastChild);
-    }
-    
-    for (let i = 0; i < firstDayOfWeek; i++) {
-        const emptyDay = document.createElement('div');
-        emptyDay.className = 'calendar-day other-month p-2';
-        calendarGrid.appendChild(emptyDay);
-    }
-    
-    const today = new Date();
-    for (let day = 1; day <= daysInMonth; day++) {
-        const dayElement = document.createElement('div');
-        const currentDate = new Date(year, month, day);
-        const isToday = currentDate.toDateString() === today.toDateString();
-        
-        dayElement.className = `calendar-day p-2 ${isToday ? 'today' : ''}`;
-        dayElement.innerHTML = `<div class="text-sm font-semibold mb-1">${day}</div>`;
-        dayElement.dataset.date = currentDate.toISOString().split('T')[0];
-        
-        calendarGrid.appendChild(dayElement);
-    }
-    
-    loadCalendarTasks();
+    // Загрузить задачи
+    await loadCalendarTasks();
 }
 
+// Загрузка задач для календаря
 async function loadCalendarTasks() {
     try {
-        let url = `${API_URL}/tasks/`;
-        const params = new URLSearchParams();
+        const tasks = await TaskAPI.getAll();
         
-        const projectFilter = document.getElementById('calendarFilterProject')?.value;
-        const priorityFilter = document.getElementById('calendarFilterPriority')?.value;
+        // Применить фильтры
+        const filterProject = document.getElementById('calendarFilterProject')?.value || '';
+        const filterPriority = document.getElementById('calendarFilterPriority')?.value || '';
         
-        if (projectFilter) params.append('project', projectFilter);
-        if (priorityFilter) params.append('priority', priorityFilter);
+        let filtered = tasks.filter(t => t.deadline); // Только задачи с дедлайнами
         
-        if (params.toString()) url += `?${params.toString()}`;
+        if (filterProject) {
+            filtered = filtered.filter(t => t.project_id == filterProject);
+        }
+        if (filterPriority) {
+            filtered = filtered.filter(t => t.priority === filterPriority);
+        }
         
-        const response = await fetch(url, {
-            headers: { 'X-Telegram-Init-Data': getInitData() }
-        });
-        
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        
-        const tasks = await response.json();
-        
-        const year = currentCalendarDate.getFullYear();
-        const month = currentCalendarDate.getMonth();
-        
-        tasks.forEach(task => {
-            if (!task.deadline) return;
-            
-            const deadlineDate = new Date(task.deadline);
-            if (deadlineDate.getFullYear() !== year || deadlineDate.getMonth() !== month) return;
-            
-            const dateStr = deadlineDate.toISOString().split('T')[0];
-            const dayElement = document.querySelector(`[data-date="${dateStr}"]`);
-            
-            if (dayElement) {
-                const priorityColors = {
-                    high: 'bg-red-200 text-red-800',
-                    medium: 'bg-yellow-200 text-yellow-800',
-                    low: 'bg-green-200 text-green-800'
-                };
-                
-                const taskDiv = document.createElement('div');
-                taskDiv.className = `calendar-task ${priorityColors[task.priority]}`;
-                taskDiv.textContent = task.title;
-                taskDiv.onclick = () => openEditTaskModal(task.id);
-                
-                dayElement.appendChild(taskDiv);
-            }
-        });
+        renderCalendarGrid(filtered);
     } catch (error) {
         console.error('Ошибка загрузки задач календаря:', error);
+        showNotification('Ошибка загрузки задач', 'error');
     }
 }
 
+// Отрисовка сетки календаря
+function renderCalendarGrid(tasks) {
+    const grid = document.getElementById('calendarGrid');
+    
+    // Сохранить заголовки дней недели
+    const headers = Array.from(grid.children).slice(0, 7);
+    grid.innerHTML = '';
+    headers.forEach(h => grid.appendChild(h));
+    
+    // Первый день месяца
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    
+    // Определить день недели (0 = воскресенье, нужен понедельник = 1)
+    let startDay = firstDay.getDay();
+    startDay = startDay === 0 ? 6 : startDay - 1; // Конвертировать в пн=0
+    
+    // Пустые ячейки в начале
+    for (let i = 0; i < startDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'border border-gray-200 p-2 min-h-[80px] bg-gray-50';
+        grid.appendChild(emptyCell);
+    }
+    
+    // Дни месяца
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+        const date = new Date(currentYear, currentMonth, day);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Найти задачи на этот день
+        const dayTasks = tasks.filter(t => {
+            if (!t.deadline) return false;
+            const taskDate = new Date(t.deadline).toISOString().split('T')[0];
+            return taskDate === dateStr;
+        });
+        
+        const isToday = 
+            date.getDate() === new Date().getDate() &&
+            date.getMonth() === new Date().getMonth() &&
+            date.getFullYear() === new Date().getFullYear();
+        
+        const cell = document.createElement('div');
+        cell.className = `border border-gray-200 p-2 min-h-[80px] ${isToday ? 'bg-blue-50 border-blue-300' : 'bg-white'}`;
+        
+        let html = `<div class="font-semibold text-sm mb-1 ${isToday ? 'text-blue-600' : 'text-gray-700'}">${day}</div>`;
+        
+        if (dayTasks.length > 0) {
+            html += '<div class="space-y-1">';
+            dayTasks.slice(0, 3).forEach(task => {
+                let bgColor = 'bg-gray-200';
+                if (task.priority === 'high') bgColor = 'bg-red-200';
+                if (task.priority === 'medium') bgColor = 'bg-yellow-200';
+                if (task.priority === 'low') bgColor = 'bg-green-200';
+                
+                html += `
+                    <div class="${bgColor} px-2 py-1 rounded text-xs truncate" title="${task.title}">
+                        ${task.completed ? '✅' : '⬜'} ${task.title}
+                    </div>
+                `;
+            });
+            
+            if (dayTasks.length > 3) {
+                html += `<div class="text-xs text-gray-500">+${dayTasks.length - 3} ещё</div>`;
+            }
+            
+            html += '</div>';
+        }
+        
+        cell.innerHTML = html;
+        grid.appendChild(cell);
+    }
+}
+
+// Сменить месяц
 function changeMonth(delta) {
-    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + delta);
+    currentMonth += delta;
+    
+    if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+    } else if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+    }
+    
     renderCalendar();
 }
 
+// Вернуться к сегодняшнему дню
 function jumpToToday() {
-    currentCalendarDate = new Date();
+    currentMonth = new Date().getMonth();
+    currentYear = new Date().getFullYear();
     renderCalendar();
 }

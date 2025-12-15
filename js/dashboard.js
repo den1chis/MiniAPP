@@ -45,24 +45,28 @@ function updateDashboardChart(tasks) {
         nextDate.setDate(nextDate.getDate() + 1);
         
         const completed = tasks.filter(t => {
-            if (!t.completed) return false;
-            const updatedAt = new Date(t.created_at); // Используем created_at как approximation
-            return updatedAt >= date && updatedAt < nextDate;
+            if (!t.completed || !t.completed_at) return false;
+            const completedDate = new Date(t.completed_at);
+            return completedDate >= date && completedDate < nextDate;
         }).length;
         
         days.push(date.toLocaleDateString('ru-RU', { weekday: 'short' }));
         counts.push(completed);
     }
     
-    const maxCount = Math.max(...counts, 1);
+    const maxCount = Math.max(...counts, 5); // Минимум 5 для красивого графика
     
     container.innerHTML = days.map((day, index) => {
-        const height = (counts[index] / maxCount) * 100;
+        const count = counts[index];
+        const height = maxCount > 0 ? (count / maxCount) * 100 : 0;
+        
         return `
-            <div class="flex flex-col items-center gap-2 flex-1">
-                <div class="w-full bg-blue-500 rounded-t" style="height: ${height}%"></div>
-                <span class="text-xs text-gray-600">${day}</span>
-                <span class="text-xs font-bold text-gray-800">${counts[index]}</span>
+            <div class="flex flex-col items-center gap-1 flex-1">
+                <div class="w-full flex items-end justify-center" style="height: 200px;">
+                    <div class="w-full bg-blue-500 rounded-t transition-all hover:bg-blue-600" style="height: ${Math.max(height, count > 0 ? 10 : 0)}%; min-height: ${count > 0 ? '20px' : '0'}"></div>
+                </div>
+                <span class="text-xs text-gray-600 font-medium">${day}</span>
+                <span class="text-xs font-bold ${count > 0 ? 'text-blue-600' : 'text-gray-400'}">${count}</span>
             </div>
         `;
     }).join('');

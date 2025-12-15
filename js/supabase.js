@@ -6,16 +6,21 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // Получить ID пользователя из Telegram
+// Получить ID пользователя из Telegram
 function getUserId() {
-    // Фиксированный ID для теста
+    // Попытка получить ID из Telegram WebApp
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
+        return String(window.Telegram.WebApp.initDataUnsafe.user.id);
+    }
+    
+    // Для тестирования вне Telegram - фиксированный ID
     let userId = localStorage.getItem('fixed_user_id');
     if (!userId) {
-        userId = 'user_' + Date.now();
+        userId = 'test_user_demo'; // Фиксированный ID для теста
         localStorage.setItem('fixed_user_id', userId);
     }
     return userId;
 }
-
 // API функции для задач
 const TaskAPI = {
     async getAll() {
