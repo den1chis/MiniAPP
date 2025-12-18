@@ -726,3 +726,29 @@ function toggleProjectNoteForm() {
 }
 
 // ========== ПЕРЕКЛЮЧЕНИЕ ТАБОВ ==========
+// Быстрый выбор даты для workspace
+function setWsDeadlineToday() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('wsTaskDeadline').value = today;
+}
+
+function setWsDeadlineTomorrow() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('wsTaskDeadline').value = tomorrow.toISOString().split('T')[0];
+}
+
+function clearWsDeadline() {
+    document.getElementById('wsTaskDeadline').value = '';
+}
+// Быстрый выбор даты для milestones
+function setMilestoneStartToday() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('milestoneStartDate').value = today;
+}
+
+function setMilestoneEndTomorrow() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('milestoneEndDate').value = tomorrow.toISOString().split('T')[0];
+}

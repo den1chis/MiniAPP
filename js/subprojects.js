@@ -438,3 +438,15 @@ async function saveSubprojectEdit() {
         showNotification('Ошибка сохранения подпроекта', 'error');
     }
 }
+
+// Быстрый выбор даты для задач подпроекта
+function setSpDeadlineToday() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('spTaskDeadline').value = today;
+}
+
+function setSpDeadlineTomorrow() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('spTaskDeadline').value = tomorrow.toISOString().split('T')[0];
+}

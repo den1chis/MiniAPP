@@ -93,35 +93,42 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== ГОРЯЧИЕ КЛАВИШИ ==========
-
+// Горячие клавиши через Alt
 document.addEventListener('keydown', (e) => {
-    // Игнорировать если фокус в input/textarea
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-        return;
-    }
-    
-    // Ctrl/Cmd + K — Поиск
-    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
-        document.getElementById('globalSearch').focus();
-    }
-    
-    // Ctrl/Cmd + N — Новая задача
-    if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+    // Alt + N - Новая задача
+    if (e.altKey && e.key === 'n') {
         e.preventDefault();
         switchTab('tasks');
-        setTimeout(() => document.getElementById('newTaskInput')?.focus(), 100);
+        setTimeout(() => toggleTaskForm(), 100);
     }
     
-    // Ctrl/Cmd + D — Дашборд
-    if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+    // Alt + D - Дашборд
+    if (e.altKey && e.key === 'd') {
         e.preventDefault();
         switchTab('dashboard');
     }
     
-    // Ctrl/Cmd + C — Календарь
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+    // Alt + C - Календарь
+    if (e.altKey && e.key === 'c') {
         e.preventDefault();
         switchTab('calendar');
+    }
+    
+    // Alt + P - Проекты
+    if (e.altKey && e.key === 'p') {
+        e.preventDefault();
+        switchTab('projects');
+    }
+    
+    // Alt + K - Канбан
+    if (e.altKey && e.key === 'k') {
+        e.preventDefault();
+        switchTab('kanban');
+    }
+    
+    // Alt + M - Заметки
+    if (e.altKey && e.key === 'm') {
+        e.preventDefault();
+        switchTab('notes');
     }
 });

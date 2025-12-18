@@ -152,6 +152,7 @@
     <div class="max-w-4xl mx-auto p-4">
         
         <!-- ========== ВКЛАДКА: ЗАДАЧИ ========== -->
+        <!-- ========== ВКЛАДКА: ЗАДАЧИ ========== -->
         <div id="view-tasks" class="tab-content">
             <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
                 
@@ -191,7 +192,7 @@
                     
                     <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
                         <select id="taskProject" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
-                            <option value="">Без проекта</option>
+                            <option value="">Личная задача</option>
                         </select>
                         
                         <select id="taskPriority" class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -200,11 +201,20 @@
                             <option value="high">🔴 Высокий</option>
                         </select>
                         
-                        <input 
-                            type="datetime-local" 
-                            id="taskDeadline" 
-                            class="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
+                        <div class="relative">
+                            <input 
+                                type="date" 
+                                id="taskDeadline" 
+                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                        </div>
+                    </div>
+                    
+                    <!-- Кнопки быстрого выбора даты -->
+                    <div class="flex gap-2 mb-2">
+                        <button onclick="setTaskDeadlineToday()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Сегодня</button>
+                        <button onclick="setTaskDeadlineTomorrow()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Завтра</button>
+                        <button onclick="clearTaskDeadline()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-red-600">Очистить</button>
                     </div>
                     
                     <button 
@@ -237,20 +247,19 @@
                         </select>
                         
                         <select id="filterCompleted" onchange="loadTasks()" class="px-3 py-2 text-sm border rounded-lg">
+                            <option value="false" selected>Активные</option>
                             <option value="">Все задачи</option>
-                            <option value="false">Активные</option>
                             <option value="true">Завершённые</option>
                         </select>
                     </div>
                 </div>
                 
-                <!-- Список задач -->
-                <div id="taskList" class="space-y-2">
+                <!-- Список задач с группировкой -->
+                <div id="taskList" class="space-y-4">
                     <p class="text-center text-gray-400 py-8">Загрузка...</p>
                 </div>
             </div>
         </div>
-        
         <!-- ========== ВКЛАДКА: ДОСКА ЗАДАЧ ========== -->
         <div id="view-kanban" class="tab-content hidden">
             <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
@@ -648,24 +657,36 @@
                 </div>
                 
                 <!-- Горячие клавиши -->
+                <!-- Горячие клавиши -->
                 <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
                     <h3 class="font-bold text-gray-800 mb-4">⌨️ Горячие клавиши</h3>
                     <div class="space-y-2 text-sm">
                         <div class="flex justify-between py-2 border-b">
                             <span class="text-gray-600">Новая задача</span>
-                            <kbd class="px-2 py-1 bg-gray-100 rounded">Ctrl + N</kbd>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + N</kbd>
                         </div>
                         <div class="flex justify-between py-2 border-b">
                             <span class="text-gray-600">Дашборд</span>
-                            <kbd class="px-2 py-1 bg-gray-100 rounded">Ctrl + D</kbd>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + D</kbd>
+                        </div>
+                        <div class="flex justify-between py-2 border-b">
+                            <span class="text-gray-600">Календарь</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + C</kbd>
+                        </div>
+                        <div class="flex justify-between py-2 border-b">
+                            <span class="text-gray-600">Проекты</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + P</kbd>
+                        </div>
+                        <div class="flex justify-between py-2 border-b">
+                            <span class="text-gray-600">Канбан</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + K</kbd>
                         </div>
                         <div class="flex justify-between py-2">
-                            <span class="text-gray-600">Календарь</span>
-                            <kbd class="px-2 py-1 bg-gray-100 rounded">Ctrl + C</kbd>
+                            <span class="text-gray-600">Заметки</span>
+                            <kbd class="px-2 py-1 bg-gray-100 rounded">Alt + M</kbd>
                         </div>
                     </div>
                 </div>
-                
                 <!-- О приложении -->
                 <div class="bg-white rounded-lg shadow-md p-4 sm:p-6">
                     <h3 class="font-bold text-gray-800 mb-2">ℹ️ О приложении</h3>
@@ -760,6 +781,7 @@
                     </div>
                     
                     <!-- Форма добавления задачи (скрыта) -->
+                    <!-- Форма добавления задачи workspace (скрыта) -->
                     <div id="wsTaskFormContainer" class="hidden mb-4 p-4 bg-gray-50 rounded-lg border-2 border-blue-200">
                         <div class="flex items-center justify-between mb-3">
                             <h3 class="font-semibold text-gray-700">Новая задача</h3>
@@ -785,10 +807,17 @@
                             </select>
                             
                             <input 
-                                type="datetime-local" 
+                                type="date" 
                                 id="wsTaskDeadline" 
                                 class="px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
+                        </div>
+                        
+                        <!-- Кнопки быстрого выбора даты -->
+                        <div class="flex gap-2 mb-2">
+                            <button onclick="setWsDeadlineToday()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Сегодня</button>
+                            <button onclick="setWsDeadlineTomorrow()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Завтра</button>
+                            <button onclick="clearWsDeadline()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-red-600">Очистить</button>
                         </div>
                         
                         <button 
@@ -798,7 +827,6 @@
                             Добавить задачу
                         </button>
                     </div>
-                    
                     <!-- Фильтр по этапам -->
                     <div class="flex flex-wrap gap-2 mb-4 pb-4 border-b">
                         <select id="wsFilterMilestone" onchange="loadWorkspaceTasks()" class="px-3 py-1.5 text-sm border rounded-lg">
@@ -964,14 +992,22 @@
                                 placeholder="Новая задача..."
                                 class="w-full px-4 py-2 border rounded-lg mb-2"
                             >
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
                                 <select id="spTaskPriority" class="px-3 py-2 border rounded-lg">
                                     <option value="low">Низкий</option>
                                     <option value="medium" selected>Средний</option>
                                     <option value="high">Высокий</option>
                                 </select>
-                                <input type="datetime-local" id="spTaskDeadline" class="px-3 py-2 border rounded-lg" colspan="2">
+                                <input type="date" id="spTaskDeadline" class="px-3 py-2 border rounded-lg">
                             </div>
+                            
+                            <!-- Кнопки быстрого выбора -->
+                            <div class="flex gap-2 mb-2">
+                                <button onclick="setSpDeadlineToday()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Сегодня</button>
+                                <button onclick="setSpDeadlineTomorrow()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Завтра</button>
+                            </div>
+
+
                             <button onclick="addSubprojectTask()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
                                 Добавить
                             </button>
@@ -1080,6 +1116,12 @@
                             >
                         </div>
                         
+                        <!-- Кнопки быстрого выбора -->
+                        <div class="flex gap-2 mb-2">
+                            <button onclick="setMilestoneStartToday()" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">Начало: Сегодня</button>
+                            <button onclick="setMilestoneEndTomorrow()" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded">Конец: Завтра</button>
+                        </div>
+                        
                         <button 
                             onclick="addMilestone()"
                             class="w-full px-6 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
@@ -1151,6 +1193,7 @@
     <!-- ========== МОДАЛЬНЫЕ ОКНА ========== -->
     
     <!-- Модальное окно редактирования задачи -->
+    <!-- Модальное окно редактирования задачи -->
     <div id="editTaskModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg max-w-md w-full p-6">
             <h3 class="text-lg font-bold mb-4">Редактировать задачу</h3>
@@ -1180,10 +1223,17 @@
             
             <label class="block text-sm font-medium mb-1">Дедлайн</label>
             <input 
-                type="datetime-local" 
+                type="date" 
                 id="editTaskDeadline" 
-                class="w-full px-3 py-2 border rounded-lg mb-4"
+                class="w-full px-3 py-2 border rounded-lg mb-2"
             >
+            
+            <!-- Кнопки быстрого выбора -->
+            <div class="flex gap-2 mb-4">
+                <button onclick="setEditDeadlineToday()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Сегодня</button>
+                <button onclick="setEditDeadlineTomorrow()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded">Завтра</button>
+                <button onclick="clearEditDeadline()" class="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-red-600">Очистить</button>
+            </div>
             
             <div class="flex gap-2">
                 <button 
@@ -1201,7 +1251,6 @@
             </div>
         </div>
     </div>
-    
     <!-- Модальное окно редактирования проекта -->
     <div id="editProjectModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div class="bg-white rounded-lg max-w-md w-full p-6">
