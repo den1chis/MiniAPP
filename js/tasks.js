@@ -34,12 +34,24 @@ async function loadTasks() {
 }
 
 // Отрисовка задач с группировкой по проектам
-function renderTasksGrouped(tasks, projects) {
+// Отрисовка задач с группировкой по проектам и подпроектам
+async function renderTasksGrouped(tasks, projects) {
     const container = document.getElementById('taskList');
     
     if (!tasks || tasks.length === 0) {
         container.innerHTML = '<p class="text-center text-gray-400 py-8">Нет задач</p>';
         return;
+    }
+    
+    // Загрузить подпроекты
+    let allSubprojects = [];
+    try {
+        for (const project of projects) {
+            const subprojects = await SubprojectAPI.getAll(project.id);
+            allSubprojects = [...allSubprojects, ...subprojects];
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки подпроектов:', error);
     }
     
     // Группировка задач
@@ -48,76 +60,143 @@ function renderTasksGrouped(tasks, projects) {
     
     tasks.filter(t => t.project_id).forEach(task => {
         if (!projectTasksMap[task.project_id]) {
-            projectTasksMap[task.project_id] = [];
+            projectTasksMap[task.project_id] = {
+                direct: [],
+                subprojects: {}
+            };
         }
-        projectTasksMap[task.project_id].push(task);
+        
+        if (task.subproject_id) {
+            if (!projectTasksMap[task.project_id].subprojects[task.subproject_id]) {
+                projectTasksMap[task.project_id].subprojects[task.subproject_id] = [];
+            }
+            projectTasksMap[task.project_id].subprojects[task.subproject_id].push(task);
+        } else {
+            projectTasksMap[task.project_id].direct.push(task);
+        }
     });
     
     let html = '';
     
     // 1. Личные задачи
     if (personalTasks.length > 0) {
-        html += renderTaskGroup('personal', 'Личные задачи', '📝', personalTasks, null);
+        html += renderTaskGroup('personal', 'Личные задачи', '📝', personalTasks, null, 0);
     }
     
-    // 2. Задачи по проектам
+    // 2. Задачи по проектам с подпроектами
     projects.forEach(project => {
-        const projectTasks = projectTasksMap[project.id] || [];
-        if (projectTasks.length > 0) {
-            html += renderTaskGroup(`project-${project.id}`, project.name, project.icon, projectTasks, project);
+        const projectData = projectTasksMap[project.id];
+        if (!projectData) return;
+        
+        const totalTasks = projectData.direct.length + 
+            Object.values(projectData.subprojects).reduce((sum, tasks) => sum + tasks.length, 0);
+        
+        if (totalTasks === 0) return;
+        
+        // Заголовок проекта
+        html += renderProjectHeader(project, totalTasks);
+        
+        // Прямые задачи проекта (без подпроекта)
+        if (projectData.direct.length > 0) {
+            html += renderTaskGroup(`project-${project.id}-direct`, 'Задачи проекта', '📋', projectData.direct, project, 1);
         }
+        
+        // Задачи подпроектов
+        Object.keys(projectData.subprojects).forEach(subprojectId => {
+            const subproject = allSubprojects.find(sp => sp.id == subprojectId);
+            if (!subproject) return;
+            
+            const subprojectTasks = projectData.subprojects[subprojectId];
+            html += renderTaskGroup(
+                `subproject-${subprojectId}`, 
+                subproject.name, 
+                subproject.icon || '📁', 
+                subprojectTasks, 
+                null, 
+                1
+            );
+        });
+        
+        html += '</div>'; // Закрываем проект
     });
     
     container.innerHTML = html || '<p class="text-center text-gray-400 py-8">Нет задач</p>';
 }
 
+// Отрисовка заголовка проекта
+function renderProjectHeader(project, totalTasks) {
+    const isCollapsed = localStorage.getItem(`project_${project.id}_collapsed`) === 'true';
+    
+    return `
+        <div class="border rounded-lg overflow-hidden mb-4">
+            <!-- Заголовок проекта -->
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3 flex items-center justify-between cursor-pointer hover:from-blue-600 hover:to-blue-700 transition-colors" onclick="toggleProject(${project.id})">
+                <div class="flex items-center gap-2">
+                    <span id="projectIcon-${project.id}" class="text-white">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="text-2xl">${project.icon}</span>
+                    <h3 class="font-bold text-white">${project.name}</h3>
+                    <span class="text-sm text-blue-100">(${totalTasks})</span>
+                </div>
+                <button onclick="event.stopPropagation(); openWorkspace(${project.id})" class="text-white hover:text-blue-100 text-sm">
+                    Открыть →
+                </button>
+            </div>
+            
+            <!-- Содержимое проекта -->
+            <div id="project-${project.id}" class="${isCollapsed ? 'hidden' : ''} bg-gray-50">
+    `;
+}
+
 // Отрисовка группы задач
-function renderTaskGroup(groupId, groupName, groupIcon, tasks, project) {
+function renderTaskGroup(groupId, groupName, groupIcon, tasks, project, indentLevel = 0) {
     const isCollapsed = localStorage.getItem(`taskGroup_${groupId}_collapsed`) === 'true';
+    const indent = indentLevel * 20; // 20px на уровень вложенности
     
     let html = `
-        <div class="border rounded-lg overflow-hidden">
+        <div class="border-b last:border-b-0">
             <!-- Заголовок группы -->
-            <div class="bg-gray-100 px-4 py-3 flex items-center justify-between cursor-pointer hover:bg-gray-200 transition-colors" onclick="toggleTaskGroup('${groupId}')">
+            <div class="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors" 
+                 onclick="toggleTaskGroup('${groupId}')"
+                 style="padding-left: ${indent + 16}px">
                 <div class="flex items-center gap-2">
-                    <span id="taskGroupIcon-${groupId}" class="text-sm">${isCollapsed ? '▶' : '▼'}</span>
-                    <span class="text-lg">${groupIcon}</span>
-                    <h3 class="font-semibold text-gray-800">${groupName}</h3>
-                    <span class="text-sm text-gray-600">(${tasks.length})</span>
+                    <span id="taskGroupIcon-${groupId}" class="text-sm text-gray-600">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="text-base">${groupIcon}</span>
+                    <h4 class="font-medium text-gray-700 text-sm">${groupName}</h4>
+                    <span class="text-xs text-gray-500">(${tasks.length})</span>
                 </div>
             </div>
             
             <!-- Список задач группы -->
-            <div id="taskGroup-${groupId}" class="${isCollapsed ? 'hidden' : ''} p-3 space-y-2 bg-white">
+            <div id="taskGroup-${groupId}" class="${isCollapsed ? 'hidden' : ''} bg-white">
     `;
     
     tasks.forEach(task => {
         html += `
-            <div class="flex items-start gap-3 p-2 hover:bg-gray-50 rounded transition-colors">
+            <div class="flex items-start gap-3 p-3 border-t hover:bg-gray-50 transition-colors" style="padding-left: ${indent + 40}px">
                 <input 
                     type="checkbox" 
                     ${task.completed ? 'checked' : ''} 
                     onchange="toggleTask(${task.id})"
-                    class="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                    class="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 >
-                <div class="flex-1">
-                    <h4 class="font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}">
+                <div class="flex-1 min-w-0">
+                    <h5 class="font-medium text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'} break-words">
                         ${task.title}
-                    </h4>
-                    ${task.description ? `<p class="text-sm text-gray-600 mt-1">${task.description}</p>` : ''}
+                    </h5>
+                    ${task.description ? `<p class="text-xs text-gray-600 mt-1 break-words">${task.description}</p>` : ''}
                     
-                    <div class="flex flex-wrap gap-2 mt-2">
-                        ${task.priority === 'high' ? '<span class="text-xs px-2 py-1 bg-red-100 text-red-700 rounded">🔴 Высокий</span>' : ''}
-                        ${task.priority === 'medium' ? '<span class="text-xs px-2 py-1 bg-yellow-100 text-yellow-700 rounded">🟡 Средний</span>' : ''}
-                        ${task.priority === 'low' ? '<span class="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">🟢 Низкий</span>' : ''}
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        ${task.priority === 'high' ? '<span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">🔴</span>' : ''}
+                        ${task.priority === 'medium' ? '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">🟡</span>' : ''}
+                        ${task.priority === 'low' ? '<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">🟢</span>' : ''}
                         
-                        ${task.deadline ? `<span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">📅 ${new Date(task.deadline).toLocaleDateString('ru-RU')}</span>` : ''}
+                        ${task.deadline ? `<span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">📅 ${new Date(task.deadline).toLocaleDateString('ru-RU')}</span>` : ''}
                     </div>
                 </div>
                 
-                <div class="flex gap-2">
-                    <button onclick="openEditTaskModal(${task.id})" class="text-blue-600 hover:text-blue-800">✏️</button>
-                    <button onclick="deleteTask(${task.id})" class="text-red-600 hover:text-red-800">🗑️</button>
+                <div class="flex gap-1 flex-shrink-0">
+                    <button onclick="openEditTaskModal(${task.id})" class="text-blue-600 hover:text-blue-800 p-1">✏️</button>
+                    <button onclick="deleteTask(${task.id})" class="text-red-600 hover:text-red-800 p-1">🗑️</button>
                 </div>
             </div>
         `;
@@ -129,6 +208,22 @@ function renderTaskGroup(groupId, groupName, groupIcon, tasks, project) {
     `;
     
     return html;
+}
+
+// Свернуть/развернуть проект
+function toggleProject(projectId) {
+    const project = document.getElementById(`project-${projectId}`);
+    const icon = document.getElementById(`projectIcon-${projectId}`);
+    
+    if (project.classList.contains('hidden')) {
+        project.classList.remove('hidden');
+        icon.textContent = '▼';
+        localStorage.setItem(`project_${projectId}_collapsed`, 'false');
+    } else {
+        project.classList.add('hidden');
+        icon.textContent = '▶';
+        localStorage.setItem(`project_${projectId}_collapsed`, 'true');
+    }
 }
 
 // Свернуть/развернуть группу задач

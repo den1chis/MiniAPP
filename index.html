@@ -453,56 +453,67 @@
         </div>
         
         <!-- ========== ВКЛАДКА: КАЛЕНДАРЬ ========== -->
+        <!-- ========== ВКЛАДКА: КАЛЕНДАРЬ ========== -->
         <div id="view-calendar" class="tab-content hidden">
-            <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
-                <!-- Навигация и фильтры -->
-                <div class="flex items-center justify-between mb-4">
-                    <button onclick="changeMonth(-1)" class="px-3 py-1 border rounded hover:bg-gray-50">←</button>
-                    <h2 class="text-lg font-bold" id="calendarMonth">Месяц</h2>
-                    <button onclick="changeMonth(1)" class="px-3 py-1 border rounded hover:bg-gray-50">→</button>
-                </div>
-                
-                <!-- Фильтры календаря -->
-                <div class="flex gap-2 mb-4">
-                    <select id="calendarFilterProject" onchange="loadCalendar()" class="px-3 py-1.5 text-sm border rounded-lg">
-                        <option value="">Все проекты</option>
-                    </select>
-                    <select id="calendarFilterPriority" onchange="loadCalendar()" class="px-3 py-1.5 text-sm border rounded-lg">
-                        <option value="">Все приоритеты</option>
-                        <option value="high">🔴 Высокий</option>
-                        <option value="medium">🟡 Средний</option>
-                        <option value="low">🟢 Низкий</option>
-                    </select>
-                    <button onclick="jumpToToday()" class="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                        Сегодня
+            <!-- Переключатель вида -->
+            <div class="bg-white rounded-lg shadow-md p-3 mb-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex gap-2">
+                        <button onclick="switchCalendarView('vertical')" id="calViewVertical" class="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm">
+                            📋 Вертикальный
+                        </button>
+                        <button onclick="switchCalendarView('grid')" id="calViewGrid" class="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm">
+                            📅 Сетка
+                        </button>
+                    </div>
+                    <button onclick="toggleQuickAddTask()" class="px-4 py-2 bg-green-500 text-white rounded-lg text-sm">
+                        + Задача
                     </button>
                 </div>
-                
-                <!-- Календарь -->
-                <div class="grid grid-cols-7 gap-1" id="calendarGrid">
-                    <!-- Дни недели -->
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Пн</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Вт</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Ср</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Чт</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Пт</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Сб</div>
-                    <div class="text-center text-xs font-semibold text-gray-600 py-2">Вс</div>
+            </div>
+            
+            <!-- Быстрое добавление задачи -->
+            <div id="calendarQuickAdd" class="hidden bg-white rounded-lg shadow-md p-4 mb-4">
+                <h3 class="font-semibold mb-3">Быстрая задача</h3>
+                <input type="text" id="calQuickTaskTitle" placeholder="Название задачи..." class="w-full px-3 py-2 border rounded-lg mb-2">
+                <input type="date" id="calQuickTaskDate" class="w-full px-3 py-2 border rounded-lg mb-2">
+                <div class="flex gap-2">
+                    <button onclick="addQuickTaskFromCalendar()" class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg">Добавить</button>
+                    <button onclick="toggleQuickAddTask()" class="flex-1 px-4 py-2 bg-gray-200 rounded-lg">Отмена</button>
                 </div>
-                
-                <!-- Легенда -->
-                <div class="flex gap-4 mt-4 text-xs">
-                    <div class="flex items-center gap-1">
-                        <div class="w-3 h-3 bg-red-200 rounded"></div>
-                        <span>Высокий приоритет</span>
+            </div>
+            
+            <!-- Вертикальный календарь -->
+            <div id="calendarVertical" class="space-y-2">
+                <!-- Дни будут здесь -->
+            </div>
+            
+            <!-- Обычный календарь-сетка -->
+            <div id="calendarGrid" class="hidden">
+                <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <button onclick="changeMonth(-1)" class="px-3 py-1 border rounded hover:bg-gray-50">←</button>
+                        <h2 class="text-lg font-bold" id="calendarMonth">Месяц</h2>
+                        <button onclick="changeMonth(1)" class="px-3 py-1 border rounded hover:bg-gray-50">→</button>
                     </div>
-                    <div class="flex items-center gap-1">
-                        <div class="w-3 h-3 bg-yellow-200 rounded"></div>
-                        <span>Средний</span>
+                    
+                    <div class="flex gap-2 mb-4">
+                        <select id="calendarFilterProject" onchange="loadCalendar()" class="px-3 py-1.5 text-sm border rounded-lg">
+                            <option value="">Все проекты</option>
+                        </select>
+                        <button onclick="jumpToToday()" class="px-3 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                            Сегодня
+                        </button>
                     </div>
-                    <div class="flex items-center gap-1">
-                        <div class="w-3 h-3 bg-green-200 rounded"></div>
-                        <span>Низкий</span>
+                    
+                    <div class="grid grid-cols-7 gap-1" id="calendarGridView">
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Пн</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Вт</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Ср</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Чт</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Пт</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Сб</div>
+                        <div class="text-center text-xs font-semibold text-gray-600 py-2">Вс</div>
                     </div>
                 </div>
             </div>
