@@ -721,9 +721,9 @@
                             </button>
 
                             <!-- В секцию быстрых действий добавьте кнопку -->
-                            <button onclick="openShareProjectModal()" class="p-4 border rounded-lg hover:bg-gray-50 text-left transition-colors">
-                                <p class="font-semibold mb-1">👥 Поделиться проектом</p>
-                                <p class="text-xs text-gray-600">Дать доступ другому пользователю</p>
+                            <button onclick="openManageMembersModal()" class="p-4 border rounded-lg hover:bg-gray-50 text-left transition-colors">
+                                <p class="font-semibold mb-1">👥 Управление доступом</p>
+                                <p class="text-xs text-gray-600">Добавить участников и настроить права</p>
                             </button>
                         </div>
                         <p class="text-gray-600 text-sm" id="ws-project-description">Описание проекта</p>
@@ -1431,7 +1431,106 @@
             </div>
         </div>
     </div>
+    <!-- Модальное окно управления участниками -->
+    <div id="manageMembersModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4">Управление доступом к проекту</h3>
+            
+            <!-- Добавить участника -->
+            <div class="bg-gray-50 rounded-lg p-4 mb-4">
+                <h4 class="font-semibold mb-3">Добавить участника</h4>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+                    <input 
+                        type="text" 
+                        id="newMemberTelegramId" 
+                        placeholder="Telegram ID пользователя"
+                        class="px-4 py-2 border rounded-lg"
+                    >
+                    
+                    <select id="newMemberRole" class="px-4 py-2 border rounded-lg">
+                        <option value="viewer">👁️ Зритель (только просмотр)</option>
+                        <option value="editor">✏️ Редактор (просмотр + редактирование)</option>
+                    </select>
+                </div>
+                
+                <button onclick="addProjectMember()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Добавить участника
+                </button>
+            </div>
+            
+            <!-- Список участников -->
+            <div class="mb-4">
+                <h4 class="font-semibold mb-3">Участники проекта</h4>
+                <div id="membersList" class="space-y-2">
+                    <p class="text-sm text-gray-500">Загрузка...</p>
+                </div>
+            </div>
+            
+            <button onclick="closeMembersModal()" class="w-full px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                Закрыть
+            </button>
+        </div>
+    </div>
 
+    <!-- Модальное окно настройки прав участника -->
+    <div id="memberPermissionsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold mb-4">Настройка прав доступа</h3>
+            
+            <input type="hidden" id="editMemberId">
+            <input type="hidden" id="editMemberUserId">
+            
+            <p class="text-sm text-gray-600 mb-4">Пользователь: <span id="editMemberUserIdDisplay" class="font-semibold"></span></p>
+            
+            <!-- Права на подпроекты -->
+            <div class="mb-4">
+                <h4 class="font-semibold mb-2">📁 Подпроекты</h4>
+                <div id="subprojectPermissions" class="space-y-2 max-h-40 overflow-y-auto">
+                    <p class="text-sm text-gray-500">Загрузка...</p>
+                </div>
+            </div>
+            
+            <!-- Общие права -->
+            <div class="mb-4 space-y-2">
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_tasks_view" class="w-5 h-5">
+                    <span>Просмотр задач проекта</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_tasks_edit" class="w-5 h-5">
+                    <span>Редактирование задач</span>
+                </label>
+                
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_notes_view" class="w-5 h-5">
+                    <span>Просмотр заметок проекта</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_notes_edit" class="w-5 h-5">
+                    <span>Редактирование заметок</span>
+                </label>
+                
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_roadmap_view" class="w-5 h-5">
+                    <span>Просмотр roadmap</span>
+                </label>
+                <label class="flex items-center gap-2">
+                    <input type="checkbox" id="perm_roadmap_edit" class="w-5 h-5">
+                    <span>Редактирование roadmap</span>
+                </label>
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="savePermissions()" class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Сохранить
+                </button>
+                <button onclick="closePermissionsModal()" class="flex-1 px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300">
+                    Отмена
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Модальное окно шаринга проекта -->
     <div id="shareProjectModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">

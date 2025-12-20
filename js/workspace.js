@@ -77,16 +77,23 @@ async function loadWorkspaceStats() {
 // ========== WORKSPACE: ЗАДАЧИ ==========
 
 // Загрузка задач workspace
+// Загрузка задач workspace с учётом прав
 async function loadWorkspaceTasks() {
     try {
-        const tasks = await TaskAPI.getAll();
-        const projectTasks = tasks.filter(t => t.project_id === window.currentProjectId);
+        const userId = getUserId();
+        const canView = await MemberPermissionAPI.canAccess(window.currentProjectId, userId, 'tasks');
         
-        // Применяем фильтры
+        if (!canView) {
+            document.getElementById('wsTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Нет доступа к задачам</p>';
+            return;
+        }
+        
+        const tasks = await TaskAPI.getAll();
+        
         const filterMilestone = document.getElementById('wsFilterMilestone')?.value || '';
         const filterPriority = document.getElementById('wsFilterPriority')?.value || '';
         
-        let filtered = projectTasks;
+        let filtered = tasks.filter(t => t.project_id === window.currentProjectId);
         
         if (filterMilestone) {
             filtered = filtered.filter(t => t.milestone_id == filterMilestone);
@@ -96,9 +103,8 @@ async function loadWorkspaceTasks() {
         }
         
         renderWorkspaceTasks(filtered);
-        await updateMilestoneSelect();
     } catch (error) {
-        console.error('Ошибка загрузки задач workspace:', error);
+        console.error('Ошибка загрузки задач:', error);
         showNotification('Ошибка загрузки задач', 'error');
     }
 }
@@ -218,18 +224,21 @@ async function updateMilestoneSelect() {
 }
 
 // Показать/скрыть форму задачи workspace
-function toggleWorkspaceTaskForm() {
+async function toggleWorkspaceTaskForm() {
+    const userId = getUserId();
+    const canEdit = await MemberPermissionAPI.canAccess(window.currentProjectId, userId, 'tasks', null, true);
+    
+    if (!canEdit) {
+        showNotification('У вас нет прав на добавление задач', 'error');
+        return;
+    }
+    
     const container = document.getElementById('wsTaskFormContainer');
-    const btn = document.querySelector('[onclick="toggleWorkspaceTaskForm()"]');
     
     if (container.classList.contains('hidden')) {
         container.classList.remove('hidden');
-        btn.innerHTML = '<span>✕</span><span>Закрыть</span>';
     } else {
         container.classList.add('hidden');
-        btn.innerHTML = '<span>+</span><span>Добавить задачу</span>';
-        document.getElementById('wsNewTaskInput').value = '';
-        document.getElementById('wsTaskDeadline').value = '';
     }
 }
 
@@ -839,5 +848,323 @@ async function removeShare(sharedWithId) {
     } catch (error) {
         console.error('Ошибка удаления доступа:', error);
         showNotification('Ошибка удаления доступа', 'error');
+    }
+}
+
+
+// ========== УПРАВЛЕНИЕ УЧАСТНИКАМИ ПРОЕКТА ==========
+
+// Открыть модальное окно управления участниками
+async function openManageMembersModal() {
+    document.getElementById('manageMembersModal').classList.remove('hidden');
+    await loadProjectMembers();
+}
+
+// Закрыть модальное окно
+function closeMembersModal() {
+    document.getElementById('manageMembersModal').classList.add('hidden');
+    document.getElementById('newMemberTelegramId').value = '';
+}
+
+// Загрузить список участников
+async function loadProjectMembers() {
+    try {
+        const members = await ProjectMemberAPI.getMembers(window.currentProjectId);
+        const container = document.getElementById('membersList');
+        
+        if (members.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">Нет участников</p>';
+            return;
+        }
+        
+        const currentUserId = getUserId();
+        
+        container.innerHTML = members.map(member => {
+            const roleIcons = {
+                owner: '👑',
+                editor: '✏️',
+                viewer: '👁️'
+            };
+            
+            const roleNames = {
+                owner: 'Владелец',
+                editor: 'Редактор',
+                viewer: 'Зритель'
+            };
+            
+            const isCurrentUser = member.user_id === currentUserId;
+            const isOwner = member.role === 'owner';
+            
+            return `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex-1">
+                        <p class="font-medium">
+                            ID: ${member.user_id} ${isCurrentUser ? '<span class="text-blue-600">(Вы)</span>' : ''}
+                        </p>
+                        <p class="text-sm text-gray-600">
+                            ${roleIcons[member.role]} ${roleNames[member.role]}
+                        </p>
+                    </div>
+                    
+                    ${!isOwner ? `
+                        <div class="flex gap-2">
+                            <button onclick="openPermissionsModal(${member.id}, '${member.user_id}')" class="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600">
+                                Права
+                            </button>
+                            <select onchange="changeMemberRole(${window.currentProjectId}, '${member.user_id}', this.value)" class="px-2 py-1 text-sm border rounded">
+                                <option value="viewer" ${member.role === 'viewer' ? 'selected' : ''}>Зритель</option>
+                                <option value="editor" ${member.role === 'editor' ? 'selected' : ''}>Редактор</option>
+                            </select>
+                            <button onclick="removeMember(${window.currentProjectId}, '${member.user_id}')" class="text-red-600 hover:text-red-800">
+                                🗑️
+                            </button>
+                        </div>
+                    ` : '<span class="text-sm text-gray-500">Полный доступ</span>'}
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки участников:', error);
+        showNotification('Ошибка загрузки участников', 'error');
+    }
+}
+
+// Добавить участника
+async function addProjectMember() {
+    const telegramId = document.getElementById('newMemberTelegramId').value.trim();
+    const role = document.getElementById('newMemberRole').value;
+    
+    if (!telegramId) {
+        showNotification('Введите Telegram ID', 'error');
+        return;
+    }
+    
+    if (telegramId === getUserId()) {
+        showNotification('Нельзя добавить самого себя', 'error');
+        return;
+    }
+    
+    try {
+        await ProjectMemberAPI.add(window.currentProjectId, telegramId, role);
+        
+        const memberId = await ProjectMemberAPI.getMemberId(window.currentProjectId, telegramId);
+        
+        // Установить базовые права в зависимости от роли
+        if (role === 'viewer') {
+            // Зритель видит всё, но не редактирует
+            await MemberPermissionAPI.set(memberId, 'tasks', true, false);
+            await MemberPermissionAPI.set(memberId, 'notes', true, false);
+            await MemberPermissionAPI.set(memberId, 'roadmap', true, false);
+        } else if (role === 'editor') {
+            // Редактор видит и редактирует всё
+            await MemberPermissionAPI.set(memberId, 'tasks', true, true);
+            await MemberPermissionAPI.set(memberId, 'notes', true, true);
+            await MemberPermissionAPI.set(memberId, 'roadmap', true, true);
+        }
+        
+        showNotification('Участник добавлен', 'success');
+        document.getElementById('newMemberTelegramId').value = '';
+        await loadProjectMembers();
+        
+    } catch (error) {
+        console.error('Ошибка добавления участника:', error);
+        showNotification(error.message || 'Ошибка добавления участника', 'error');
+    }
+}
+
+// Изменить роль участника
+async function changeMemberRole(projectId, userId, newRole) {
+    try {
+        await ProjectMemberAPI.updateRole(projectId, userId, newRole);
+        
+        const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+        
+        // Обновить права согласно новой роли
+        if (newRole === 'viewer') {
+            await MemberPermissionAPI.set(memberId, 'tasks', true, false);
+            await MemberPermissionAPI.set(memberId, 'notes', true, false);
+            await MemberPermissionAPI.set(memberId, 'roadmap', true, false);
+        } else if (newRole === 'editor') {
+            await MemberPermissionAPI.set(memberId, 'tasks', true, true);
+            await MemberPermissionAPI.set(memberId, 'notes', true, true);
+            await MemberPermissionAPI.set(memberId, 'roadmap', true, true);
+        }
+        
+        showNotification('Роль изменена', 'success');
+        await loadProjectMembers();
+        
+    } catch (error) {
+        console.error('Ошибка изменения роли:', error);
+        showNotification(error.message || 'Ошибка изменения роли', 'error');
+    }
+}
+
+// Удалить участника
+async function removeMember(projectId, userId) {
+    if (!confirm('Удалить этого участника из проекта?')) return;
+    
+    try {
+        await ProjectMemberAPI.remove(projectId, userId);
+        showNotification('Участник удалён', 'success');
+        await loadProjectMembers();
+    } catch (error) {
+        console.error('Ошибка удаления участника:', error);
+        showNotification(error.message || 'Ошибка удаления участника', 'error');
+    }
+}
+
+// ========== НАСТРОЙКА ДЕТАЛЬНЫХ ПРАВ ==========
+
+// Открыть модальное окно прав
+async function openPermissionsModal(memberId, userId) {
+    document.getElementById('editMemberId').value = memberId;
+    document.getElementById('editMemberUserId').value = userId;
+    document.getElementById('editMemberUserIdDisplay').textContent = userId;
+    document.getElementById('memberPermissionsModal').classList.remove('hidden');
+    
+    await loadMemberPermissions(memberId);
+    await loadSubprojectPermissions(memberId);
+}
+
+// Закрыть модальное окно прав
+function closePermissionsModal() {
+    document.getElementById('memberPermissionsModal').classList.add('hidden');
+}
+
+// Загрузить права участника
+async function loadMemberPermissions(memberId) {
+    try {
+        const permissions = await MemberPermissionAPI.get(memberId);
+        
+        // Сбросить чекбоксы
+        document.getElementById('perm_tasks_view').checked = false;
+        document.getElementById('perm_tasks_edit').checked = false;
+        document.getElementById('perm_notes_view').checked = false;
+        document.getElementById('perm_notes_edit').checked = false;
+        document.getElementById('perm_roadmap_view').checked = false;
+        document.getElementById('perm_roadmap_edit').checked = false;
+        
+        // Заполнить чекбоксы
+        permissions.forEach(perm => {
+            if (perm.resource_id !== null) return; // Пропустить специфичные права
+            
+            if (perm.resource_type === 'tasks') {
+                document.getElementById('perm_tasks_view').checked = perm.can_view;
+                document.getElementById('perm_tasks_edit').checked = perm.can_edit;
+            } else if (perm.resource_type === 'notes') {
+                document.getElementById('perm_notes_view').checked = perm.can_view;
+                document.getElementById('perm_notes_edit').checked = perm.can_edit;
+            } else if (perm.resource_type === 'roadmap') {
+                document.getElementById('perm_roadmap_view').checked = perm.can_view;
+                document.getElementById('perm_roadmap_edit').checked = perm.can_edit;
+            }
+        });
+        
+    } catch (error) {
+        console.error('Ошибка загрузки прав:', error);
+    }
+}
+
+// Загрузить права на подпроекты
+async function loadSubprojectPermissions(memberId) {
+    try {
+        const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
+        const permissions = await MemberPermissionAPI.get(memberId);
+        
+        const container = document.getElementById('subprojectPermissions');
+        
+        if (subprojects.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">Нет подпроектов</p>';
+            return;
+        }
+        
+        container.innerHTML = subprojects.map(sp => {
+            const perm = permissions.find(p => p.resource_type === 'subproject' && p.resource_id === sp.id);
+            
+            return `
+                <div class="flex items-center justify-between p-2 bg-white rounded border">
+                    <span class="text-sm">${sp.icon} ${sp.name}</span>
+                    <div class="flex gap-2">
+                        <label class="flex items-center gap-1">
+                            <input 
+                                type="checkbox" 
+                                ${perm?.can_view ? 'checked' : ''}
+                                onchange="toggleSubprojectPermission(${memberId}, ${sp.id}, 'view', this.checked)"
+                                class="w-4 h-4"
+                            >
+                            <span class="text-xs">Видит</span>
+                        </label>
+                        <label class="flex items-center gap-1">
+                            <input 
+                                type="checkbox" 
+                                ${perm?.can_edit ? 'checked' : ''}
+                                onchange="toggleSubprojectPermission(${memberId}, ${sp.id}, 'edit', this.checked)"
+                                class="w-4 h-4"
+                            >
+                            <span class="text-xs">Редактирует</span>
+                        </label>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Ошибка загрузки прав на подпроекты:', error);
+    }
+}
+
+// Переключить право на подпроект
+async function toggleSubprojectPermission(memberId, subprojectId, permType, isChecked) {
+    try {
+        const permissions = await MemberPermissionAPI.get(memberId);
+        const existing = permissions.find(p => p.resource_type === 'subproject' && p.resource_id === subprojectId);
+        
+        let canView = existing?.can_view || false;
+        let canEdit = existing?.can_edit || false;
+        
+        if (permType === 'view') {
+            canView = isChecked;
+            if (!isChecked) canEdit = false; // Если убрали просмотр, убрать и редактирование
+        } else if (permType === 'edit') {
+            canEdit = isChecked;
+            if (isChecked) canView = true; // Если дали редактирование, автоматически дать просмотр
+        }
+        
+        await MemberPermissionAPI.set(memberId, 'subproject', canView, canEdit, subprojectId);
+        await loadSubprojectPermissions(memberId);
+        
+    } catch (error) {
+        console.error('Ошибка изменения прав:', error);
+        showNotification('Ошибка изменения прав', 'error');
+    }
+}
+
+// Сохранить общие права
+async function savePermissions() {
+    const memberId = parseInt(document.getElementById('editMemberId').value);
+    
+    try {
+        // Задачи
+        const tasksView = document.getElementById('perm_tasks_view').checked;
+        const tasksEdit = document.getElementById('perm_tasks_edit').checked;
+        await MemberPermissionAPI.set(memberId, 'tasks', tasksView, tasksEdit);
+        
+        // Заметки
+        const notesView = document.getElementById('perm_notes_view').checked;
+        const notesEdit = document.getElementById('perm_notes_edit').checked;
+        await MemberPermissionAPI.set(memberId, 'notes', notesView, notesEdit);
+        
+        // Roadmap
+        const roadmapView = document.getElementById('perm_roadmap_view').checked;
+        const roadmapEdit = document.getElementById('perm_roadmap_edit').checked;
+        await MemberPermissionAPI.set(memberId, 'roadmap', roadmapView, roadmapEdit);
+        
+        showNotification('Права сохранены', 'success');
+        closePermissionsModal();
+        
+    } catch (error) {
+        console.error('Ошибка сохранения прав:', error);
+        showNotification('Ошибка сохранения прав', 'error');
     }
 }
