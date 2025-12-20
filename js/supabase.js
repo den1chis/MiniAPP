@@ -25,14 +25,50 @@ function getUserId() {
 const TaskAPI = {
     async getAll() {
         const userId = getUserId();
-        const { data, error } = await supabase
+        
+        // Свои задачи
+        const { data: myTasks, error: myError } = await supabase
             .from('tasks')
             .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
-        return data || [];
+        if (myError) throw myError;
+        
+        // Получить проекты, где я участник
+        const { data: memberRecords } = await supabase
+            .from('project_members')
+            .select('project_id, id')
+            .eq('user_id', userId)
+            .neq('role', 'owner');
+        
+        if (!memberRecords || memberRecords.length === 0) {
+            return myTasks || [];
+        }
+        
+        let sharedTasks = [];
+        
+        // Для каждого проекта проверить права на задачи
+        for (const member of memberRecords) {
+            const canView = await MemberPermissionAPI.canAccess(member.project_id, userId, 'tasks');
+            
+            if (canView) {
+                // Загрузить задачи этого проекта
+                const { data: projectTasks } = await supabase
+                    .from('tasks')
+                    .select('*')
+                    .eq('project_id', member.project_id);
+                
+                if (projectTasks) {
+                    projectTasks.forEach(t => {
+                        t.isShared = true;
+                        sharedTasks.push(t);
+                    });
+                }
+            }
+        }
+        
+        return [...(myTasks || []), ...sharedTasks];
     },
 
     async create(task) {
@@ -445,21 +481,25 @@ const ProjectAPI = {
         
         if (error) throw error;
     }
-};
+};  
 // API функции для заметок
 const NoteAPI = {
     async getAll() {
         const userId = getUserId();
-        const { data, error } = await supabase
+        
+        // Свои заметки
+        const { data: myNotes, error } = await supabase
             .from('notes')
             .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
         
         if (error) throw error;
-        return data || [];
+        
+        // Заметки из расшаренных проектов будут загружаться отдельно в ProjectNoteAPI
+        return myNotes || [];
     },
-
+    
     async create(note) {
         const userId = getUserId();
         const { data, error } = await supabase
@@ -498,15 +538,55 @@ const NoteAPI = {
 const SubprojectAPI = {
     async getAll(projectId) {
         const userId = getUserId();
-        const { data, error } = await supabase
+        
+        // Свои подпроекты
+        const { data: mySubprojects, error: myError } = await supabase
             .from('subprojects')
             .select('*')
             .eq('user_id', userId)
             .eq('project_id', projectId)
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
-        return data || [];
+        if (myError) throw myError;
+        
+        // Проверить, участник ли пользователь этого проекта
+        const role = await ProjectMemberAPI.getRole(projectId, userId);
+        
+        if (!role || role === 'owner') {
+            // Владелец или не участник - только свои подпроекты
+            return mySubprojects || [];
+        }
+        
+        // Получить ID участника
+        const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+        if (!memberId) return mySubprojects || [];
+        
+        // Получить разрешения на подпроекты
+        const permissions = await MemberPermissionAPI.get(memberId);
+        const allowedSubprojectIds = permissions
+            .filter(p => p.resource_type === 'subproject' && p.can_view && p.resource_id !== null)
+            .map(p => p.resource_id);
+        
+        if (allowedSubprojectIds.length === 0) {
+            return mySubprojects || [];
+        }
+        
+        // Загрузить расшаренные подпроекты
+        const { data: sharedSubprojects, error: sharedError } = await supabase
+            .from('subprojects')
+            .select('*')
+            .in('id', allowedSubprojectIds)
+            .eq('project_id', projectId);
+        
+        if (sharedError) throw sharedError;
+        
+        const allSubprojects = [...(mySubprojects || [])];
+        (sharedSubprojects || []).forEach(sp => {
+            sp.isShared = true;
+            allSubprojects.push(sp);
+        });
+        
+        return allSubprojects;
     },
 
     async create(subproject) {
@@ -547,17 +627,25 @@ const SubprojectAPI = {
 const MilestoneAPI = {
     async getAll(projectId) {
         const userId = getUserId();
+        
+        // Проверить права на roadmap
+        const canView = await MemberPermissionAPI.canAccess(projectId, userId, 'roadmap');
+        
+        if (!canView) {
+            // Нет прав - вернуть пустой массив
+            return [];
+        }
+        
         const { data, error } = await supabase
             .from('milestones')
             .select('*')
-            .eq('user_id', userId)
             .eq('project_id', projectId)
-            .order('start_date', { ascending: true });
+            .order('created_at', { ascending: true });
         
         if (error) throw error;
         return data || [];
     },
-
+    
     async create(milestone) {
         const userId = getUserId();
         const { data, error } = await supabase
@@ -589,6 +677,26 @@ const MilestoneAPI = {
             .eq('id', id);
         
         if (error) throw error;
+    },
+
+    async toggleComplete(id) {
+        const { data, error } = await supabase
+            .from('milestones')
+            .select('completed')
+            .eq('id', id)
+            .single();
+        
+        if (error) throw error;
+        
+        const { data: updated, error: updateError } = await supabase
+            .from('milestones')
+            .update({ completed: !data.completed })
+            .eq('id', id)
+            .select()
+            .single();
+        
+        if (updateError) throw updateError;
+        return updated;
     }
 };
 
@@ -765,22 +873,29 @@ const SubprojectNoteAPI = {
 const ProjectNoteAPI = {
     async getAll(projectId) {
         const userId = getUserId();
+        
+        // Проверить права на заметки
+        const canView = await MemberPermissionAPI.canAccess(projectId, userId, 'notes');
+        
+        if (!canView) {
+            return [];
+        }
+        
         const { data, error } = await supabase
             .from('project_notes')
             .select('*')
-            .eq('user_id', userId)
             .eq('project_id', projectId)
             .order('created_at', { ascending: false });
         
         if (error) throw error;
         return data || [];
     },
-
-    async create(projectId, title, content) {
+    
+    async create(note) {
         const userId = getUserId();
         const { data, error } = await supabase
             .from('project_notes')
-            .insert([{ project_id: projectId, title, content, user_id: userId }])
+            .insert([{ ...note, user_id: userId }])
             .select()
             .single();
         

@@ -1168,3 +1168,56 @@ async function savePermissions() {
         showNotification('Ошибка сохранения прав', 'error');
     }
 }
+
+// Открыть workspace проекта
+async function openWorkspace(projectId) {
+    console.log('Opening workspace for project:', projectId);
+    
+    window.currentProjectId = projectId;
+    
+    try {
+        const projects = await ProjectAPI.getAll();
+        const project = projects.find(p => p.id === projectId);
+        
+        if (!project) {
+            showNotification('Проект не найден', 'error');
+            return;
+        }
+        
+        // Проверить, есть ли доступ к проекту
+        const userId = getUserId();
+        const role = await ProjectMemberAPI.getRole(projectId, userId);
+        
+        if (!role) {
+            showNotification('У вас нет доступа к этому проекту', 'error');
+            return;
+        }
+        
+        // Скрыть основные табы, показать workspace табы
+        document.getElementById('mainTabs').classList.add('hidden');
+        document.getElementById('workspaceTabs').classList.remove('hidden');
+        
+        // Показать workspace view
+        const allViews = document.querySelectorAll('.tab-content');
+        allViews.forEach(v => v.classList.add('hidden'));
+        document.getElementById('view-workspace').classList.remove('hidden');
+        
+        // Показать кнопку "Назад"
+        document.getElementById('backBtn').classList.remove('hidden');
+        document.getElementById('pageTitle').textContent = `${project.icon} ${project.name}`;
+        
+        // Установить данные проекта
+        document.getElementById('ws-project-name').textContent = project.name;
+        document.getElementById('ws-project-description').textContent = project.description || 'Нет описания';
+        
+        // Загрузить данные
+        await loadWorkspaceData();
+        
+        // Переключиться на overview
+        switchWorkspaceTab('overview');
+        
+    } catch (error) {
+        console.error('Ошибка открытия workspace:', error);
+        showNotification('Ошибка открытия проекта', 'error');
+    }
+}
