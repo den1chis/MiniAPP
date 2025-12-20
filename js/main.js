@@ -19,7 +19,7 @@ if (tg) {
     
     const user = tg.initDataUnsafe?.user;
     if (user) {
-        document.getElementById('userInfo').textContent = `${user.first_name}`;
+        document.getElementById('userInfo').textContent = `${user.first_name} (ID: ${user.id})`;
     }
 } else {
     document.getElementById('userInfo').textContent = 'Локальный режим';

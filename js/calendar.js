@@ -177,9 +177,10 @@ function toggleQuickAddTask() {
 }
 
 // Добавить задачу из календаря
+// Обновите addQuickTaskFromCalendar:
 async function addQuickTaskFromCalendar() {
     const title = document.getElementById('calQuickTaskTitle').value.trim();
-    const deadline = document.getElementById('calQuickTaskDate').value;
+    let deadline = document.getElementById('calQuickTaskDate').value;
     
     if (!title) {
         showNotification('Введите название задачи', 'error');
@@ -190,6 +191,9 @@ async function addQuickTaskFromCalendar() {
         showNotification('Выберите дату', 'error');
         return;
     }
+    
+    // Установить время 23:59:59
+    deadline = setEndOfDay(deadline);
     
     try {
         await TaskAPI.create({
@@ -208,6 +212,13 @@ async function addQuickTaskFromCalendar() {
         console.error('Ошибка добавления задачи:', error);
         showNotification('Ошибка добавления задачи', 'error');
     }
+}
+
+// Добавьте функцию
+function setEndOfDay(dateString) {
+    const date = new Date(dateString);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
 }
 
 // ========== КАЛЕНДАРЬ-СЕТКА ==========

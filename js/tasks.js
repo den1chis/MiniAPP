@@ -243,6 +243,7 @@ function toggleTaskGroup(groupId) {
 }
 
 // Добавить задачу
+// Добавить задачу
 async function addTask() {
     const input = document.getElementById('newTaskInput');
     const title = input.value.trim();
@@ -254,7 +255,12 @@ async function addTask() {
     
     const projectId = document.getElementById('taskProject')?.value || null;
     const priority = document.getElementById('taskPriority')?.value || 'medium';
-    const deadline = document.getElementById('taskDeadline')?.value || null;
+    let deadline = document.getElementById('taskDeadline')?.value || null;
+    
+    // Установить время 23:59:59 для дедлайна
+    if (deadline) {
+        deadline = setEndOfDay(deadline);
+    }
     
     try {
         await TaskAPI.create({
@@ -272,12 +278,18 @@ async function addTask() {
         showNotification('Задача добавлена', 'success');
         await loadTasks();
         
-        // Закрыть форму после добавления
         toggleTaskForm();
     } catch (error) {
         console.error('Ошибка добавления задачи:', error);
         showNotification('Ошибка добавления задачи', 'error');
     }
+}
+
+// Функция установки времени на конец дня
+function setEndOfDay(dateString) {
+    const date = new Date(dateString);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
 }
 
 // Кнопки быстрого выбора даты
@@ -358,16 +370,22 @@ async function openEditTaskModal(id) {
 }
 
 // Сохранить изменения задачи
+// Сохранить изменения задачи
 async function saveTaskEdit() {
     const id = parseInt(document.getElementById('editTaskId').value);
     const title = document.getElementById('editTaskTitle').value.trim();
     const description = document.getElementById('editTaskDescription').value.trim();
     const priority = document.getElementById('editTaskPriority').value;
-    const deadline = document.getElementById('editTaskDeadline').value || null;
+    let deadline = document.getElementById('editTaskDeadline').value || null;
     
     if (!title) {
         showNotification('Введите название задачи', 'error');
         return;
+    }
+    
+    // Установить время 23:59:59 для дедлайна
+    if (deadline) {
+        deadline = setEndOfDay(deadline);
     }
     
     try {

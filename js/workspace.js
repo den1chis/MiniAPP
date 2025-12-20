@@ -140,6 +140,7 @@ function renderWorkspaceTasks(tasks) {
 }
 
 // Добавить задачу в workspace
+// В функции addWorkspaceTask добавьте:
 async function addWorkspaceTask() {
     const input = document.getElementById('wsNewTaskInput');
     const title = input.value.trim();
@@ -151,7 +152,12 @@ async function addWorkspaceTask() {
     
     const milestoneId = document.getElementById('wsTaskMilestone')?.value || null;
     const priority = document.getElementById('wsTaskPriority')?.value || 'medium';
-    const deadline = document.getElementById('wsTaskDeadline')?.value || null;
+    let deadline = document.getElementById('wsTaskDeadline')?.value || null;
+    
+    // Установить время 23:59:59
+    if (deadline) {
+        deadline = setEndOfDay(deadline);
+    }
     
     try {
         await TaskAPI.create({
@@ -751,4 +757,87 @@ function setMilestoneEndTomorrow() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     document.getElementById('milestoneEndDate').value = tomorrow.toISOString().split('T')[0];
+}
+
+// В конец файла
+function setEndOfDay(dateString) {
+    const date = new Date(dateString);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
+}
+
+
+// Открыть модальное окно шаринга
+async function openShareProjectModal() {
+    document.getElementById('shareProjectModal').classList.remove('hidden');
+    await loadCurrentShares();
+}
+
+// Закрыть модальное окно
+function closeShareProjectModal() {
+    document.getElementById('shareProjectModal').classList.add('hidden');
+    document.getElementById('shareWithTelegramId').value = '';
+}
+
+// Загрузить текущие шары
+async function loadCurrentShares() {
+    try {
+        const shares = await ProjectShareAPI.getProjectShares(window.currentProjectId);
+        const container = document.getElementById('currentShares');
+        
+        if (shares.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500">Проект ни с кем не расшарен</p>';
+            return;
+        }
+        
+        container.innerHTML = shares.map(share => `
+            <div class="flex items-center justify-between p-2 bg-gray-50 rounded">
+                <span class="text-sm">ID: ${share.shared_with_id}</span>
+                <button onclick="removeShare('${share.shared_with_id}')" class="text-red-600 hover:text-red-800 text-sm">
+                    Удалить
+                </button>
+            </div>
+        `).join('');
+    } catch (error) {
+        console.error('Ошибка загрузки шаров:', error);
+    }
+}
+
+// Поделиться проектом
+async function shareProject() {
+    const telegramId = document.getElementById('shareWithTelegramId').value.trim();
+    
+    if (!telegramId) {
+        showNotification('Введите Telegram ID', 'error');
+        return;
+    }
+    
+    if (telegramId === getUserId()) {
+        showNotification('Нельзя расшарить с самим собой', 'error');
+        return;
+    }
+    
+    try {
+        await ProjectShareAPI.share(window.currentProjectId, telegramId);
+        showNotification('Проект расшарен', 'success');
+        document.getElementById('shareWithTelegramId').value = '';
+        await loadCurrentShares();
+    } catch (error) {
+        console.error('Ошибка шаринга:', error);
+        showNotification(error.message || 'Ошибка шаринга', 'error');
+    }
+}
+
+// Удалить доступ
+async function removeShare(sharedWithId) {
+    if (!confirm('Удалить доступ для этого пользователя?')) return;
+    
+    try {
+        await ProjectShareAPI.removeShare(window.currentProjectId, sharedWithId);
+        showNotification('Доступ удалён', 'success');
+        await loadCurrentShares();
+    } catch (error) {
+        console.error('Ошибка удаления доступа:', error);
+        showNotification('Ошибка удаления доступа', 'error');
+    }
 }

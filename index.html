@@ -719,6 +719,12 @@
                             <button onclick="openEditProjectModal()" class="text-sm text-blue-600 hover:text-blue-800">
                                 ✏️ Изменить
                             </button>
+
+                            <!-- В секцию быстрых действий добавьте кнопку -->
+                            <button onclick="openShareProjectModal()" class="p-4 border rounded-lg hover:bg-gray-50 text-left transition-colors">
+                                <p class="font-semibold mb-1">👥 Поделиться проектом</p>
+                                <p class="text-xs text-gray-600">Дать доступ другому пользователю</p>
+                            </button>
                         </div>
                         <p class="text-gray-600 text-sm" id="ws-project-description">Описание проекта</p>
                     </div>
@@ -1426,6 +1432,44 @@
         </div>
     </div>
 
+
+    <!-- Модальное окно шаринга проекта -->
+    <div id="shareProjectModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg max-w-md w-full p-6">
+            <h3 class="text-lg font-bold mb-4">Поделиться проектом</h3>
+            
+            <p class="text-sm text-gray-600 mb-4">Введите Telegram ID пользователя, с которым хотите поделиться проектом:</p>
+            
+            <input 
+                type="text" 
+                id="shareWithTelegramId" 
+                placeholder="Например: 123456789"
+                class="w-full px-4 py-2 border rounded-lg mb-4"
+            >
+            
+            <div class="mb-4">
+                <h4 class="font-semibold text-sm mb-2">Текущий доступ:</h4>
+                <div id="currentShares" class="space-y-2 max-h-40 overflow-y-auto">
+                    <p class="text-sm text-gray-500">Загрузка...</p>
+                </div>
+            </div>
+            
+            <div class="flex gap-2">
+                <button 
+                    onclick="shareProject()"
+                    class="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+                >
+                    Поделиться
+                </button>
+                <button 
+                    onclick="closeShareProjectModal()"
+                    class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                    Закрыть
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- Подключение модулей -->
     <script src="js/main.js"></script>
     <script src="js/navigation.js"></script>
