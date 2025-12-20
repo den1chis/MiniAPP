@@ -700,21 +700,33 @@ const MilestoneAPI = {
     }
 };
 
-// API для кастомных полей
 const CustomFieldAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
+        
+        // Проверить доступ к подпроекту
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', subprojectId)
+            .single();
+        
+        if (!subproject) return [];
+        
+        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', subprojectId);
+        
+        if (!canView) return [];
+        
         const { data, error } = await supabase
             .from('custom_fields')
             .select('*')
-            .eq('user_id', userId)
             .eq('subproject_id', subprojectId)
             .order('created_at', { ascending: true });
         
         if (error) throw error;
         return data || [];
     },
-
+    
     async create(field) {
         const userId = getUserId();
         const { data, error } = await supabase
@@ -753,11 +765,25 @@ const CustomFieldAPI = {
 const SpTableAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
+        
+        // Проверить доступ к подпроекту
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', subprojectId)
+            .single();
+        
+        if (!subproject) return [];
+        
+        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', subprojectId);
+        
+        if (!canView) return [];
+        
         const { data, error } = await supabase
             .from('sp_tables')
             .select('*')
-            .eq('user_id', userId)
-            .eq('subproject_id', subprojectId);
+            .eq('subproject_id', subprojectId)
+            .order('created_at', { ascending: true });
         
         if (error) throw error;
         return data || [];
@@ -784,13 +810,33 @@ const SpTableAPI = {
         if (error) throw error;
     },
 
-    // Строки таблицы
     async getRows(tableId) {
         const userId = getUserId();
+        
+        // Получить таблицу и проверить доступ
+        const { data: table } = await supabase
+            .from('sp_tables')
+            .select('subproject_id')
+            .eq('id', tableId)
+            .single();
+        
+        if (!table) return [];
+        
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', table.subproject_id)
+            .single();
+        
+        if (!subproject) return [];
+        
+        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', table.subproject_id);
+        
+        if (!canView) return [];
+        
         const { data, error } = await supabase
             .from('sp_table_rows')
             .select('*')
-            .eq('user_id', userId)
             .eq('table_id', tableId)
             .order('created_at', { ascending: true });
         
@@ -802,7 +848,11 @@ const SpTableAPI = {
         const userId = getUserId();
         const { data, error } = await supabase
             .from('sp_table_rows')
-            .insert([{ table_id: tableId, row_data: rowData, user_id: userId }])
+            .insert([{
+                table_id: tableId,
+                row_data: rowData,
+                user_id: userId
+            }])
             .select()
             .single();
         
@@ -836,10 +886,23 @@ const SpTableAPI = {
 const SubprojectNoteAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
+        
+        // Проверить доступ к подпроекту
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', subprojectId)
+            .single();
+        
+        if (!subproject) return [];
+        
+        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', subprojectId);
+        
+        if (!canView) return [];
+        
         const { data, error } = await supabase
             .from('subproject_notes')
             .select('*')
-            .eq('user_id', userId)
             .eq('subproject_id', subprojectId)
             .order('created_at', { ascending: false });
         
@@ -847,11 +910,11 @@ const SubprojectNoteAPI = {
         return data || [];
     },
 
-    async create(subprojectId, content) {
+    async create(note) {
         const userId = getUserId();
         const { data, error } = await supabase
             .from('subproject_notes')
-            .insert([{ subproject_id: subprojectId, content, user_id: userId }])
+            .insert([{ ...note, user_id: userId }])
             .select()
             .single();
         

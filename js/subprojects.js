@@ -1,6 +1,7 @@
 // ========== ДЕТАЛЬНЫЙ ВИД ПОДПРОЕКТА ==========
 
 // Открыть детальный вид подпроекта
+// Открыть детальный вид подпроекта
 async function openSubprojectDetail(subprojectId) {
     window.currentSubprojectId = subprojectId;
     
@@ -10,20 +11,43 @@ async function openSubprojectDetail(subprojectId) {
         
         if (!subproject) return;
         
-        // Заполнить информацию
-        document.getElementById('subproject-detail-icon').textContent = subproject.icon || '📁';
-        document.getElementById('subproject-detail-name').textContent = subproject.name;
-        document.getElementById('subproject-detail-description').textContent = subproject.description || '';
+        // Проверить права доступа
+        const userId = getUserId();
+        const canEdit = await MemberPermissionAPI.canAccess(window.currentProjectId, userId, 'subproject', subprojectId, true);
         
-        // Скрыть список подпроектов, показать детальный вид
+        // Скрыть список подпроектов
         document.getElementById('workspace-subprojects').classList.add('hidden');
+        
+        // Показать детальный вид
         document.getElementById('subproject-detail-view').classList.remove('hidden');
         
-        // Загрузить данные
-        await loadCustomFields();
+        // Заполнить данные
+        document.getElementById('subproject-detail-icon').textContent = subproject.icon || '📁';
+        document.getElementById('subproject-detail-name').textContent = subproject.name;
+        document.getElementById('subproject-detail-description').textContent = subproject.description || 'Нет описания';
         
-        // Показать таб "Данные" по умолчанию
+        // Скрыть кнопки редактирования если нет прав
+        if (!canEdit) {
+            // Скрыть все кнопки добавления
+            const addButtons = document.querySelectorAll('#subproject-detail-view button[onclick*="add"], button[onclick*="toggle"]');
+            addButtons.forEach(btn => {
+                if (!btn.onclick || !btn.onclick.toString().includes('close')) {
+                    btn.style.display = 'none';
+                }
+            });
+            
+            // Скрыть кнопку "Изменить"
+            const editBtn = document.querySelector('button[onclick="openEditSubprojectModal()"]');
+            if (editBtn) editBtn.style.display = 'none';
+        } else {
+            // Показать все кнопки
+            const addButtons = document.querySelectorAll('#subproject-detail-view button');
+            addButtons.forEach(btn => btn.style.display = '');
+        }
+        
+        // Загрузить данные
         switchSubprojectTab('data');
+        await loadCustomFields();
         
     } catch (error) {
         console.error('Ошибка открытия подпроекта:', error);
@@ -152,14 +176,29 @@ function closeAddFieldModal() {
 async function saveCustomField() {
     const name = document.getElementById('fieldName').value.trim();
     const type = document.getElementById('fieldType').value;
-    const value = document.getElementById('fieldValue').value.trim();
+    const value = document.getElementById('fieldValue').value;
     
-    if (!name || !value) {
-        showNotification('Заполните все поля', 'error');
+    if (!name) {
+        showNotification('Введите название поля', 'error');
         return;
     }
     
     try {
+        // Проверить права на редактирование
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', window.currentSubprojectId)
+            .single();
+        
+        const userId = getUserId();
+        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
+        
+        if (!canEdit) {
+            showNotification('У вас нет прав на добавление полей', 'error');
+            return;
+        }
+        
         await CustomFieldAPI.create({
             subproject_id: window.currentSubprojectId,
             field_name: name,
@@ -193,15 +232,34 @@ async function deleteCustomField(id) {
 // ========== ЗАДАЧИ ПОДПРОЕКТА ==========
 
 // Загрузка задач подпроекта
+// Загрузка задач подпроекта
 async function loadSubprojectTasks() {
     try {
+        const userId = getUserId();
+        
+        // Получить project_id текущего подпроекта
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', window.currentSubprojectId)
+            .single();
+        
+        if (!subproject) return;
+        
+        // Проверить доступ
+        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId);
+        
+        if (!canView) {
+            document.getElementById('spTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Нет доступа к задачам</p>';
+            return;
+        }
+        
         const tasks = await TaskAPI.getAll();
         const subprojectTasks = tasks.filter(t => t.subproject_id === window.currentSubprojectId);
         
         renderSubprojectTasks(subprojectTasks);
     } catch (error) {
-        console.error('Ошибка загрузки задач:', error);
-        showNotification('Ошибка загрузки задач', 'error');
+        console.error('Ошибка загрузки задач подпроекта:', error);
     }
 }
 
@@ -249,13 +307,32 @@ async function addSubprojectTask() {
         return;
     }
     
-    const priority = document.getElementById('spTaskPriority').value;
-    const deadline = document.getElementById('spTaskDeadline').value || null;
+    const priority = document.getElementById('spTaskPriority')?.value || 'medium';
+    let deadline = document.getElementById('spTaskDeadline')?.value || null;
+    
+    if (deadline) {
+        deadline = setEndOfDay(deadline);
+    }
     
     try {
+        // Проверить права на редактирование
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', window.currentSubprojectId)
+            .single();
+        
+        const userId = getUserId();
+        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
+        
+        if (!canEdit) {
+            showNotification('У вас нет прав на добавление задач', 'error');
+            return;
+        }
+        
         await TaskAPI.create({
             title,
-            project_id: window.currentProjectId,
+            project_id: subproject.project_id,
             subproject_id: window.currentSubprojectId,
             priority,
             deadline,
@@ -268,12 +345,18 @@ async function addSubprojectTask() {
         
         showNotification('Задача добавлена', 'success');
         await loadSubprojectTasks();
-        
         toggleSpTaskForm();
     } catch (error) {
         console.error('Ошибка добавления задачи:', error);
         showNotification('Ошибка добавления задачи', 'error');
     }
+}
+
+// Добавьте функцию в конец файла
+function setEndOfDay(dateString) {
+    const date = new Date(dateString);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
 }
 
 // Показать/скрыть форму задачи подпроекта
@@ -336,13 +419,29 @@ async function addSubprojectNote() {
     }
     
     try {
-        await SubprojectNoteAPI.create(window.currentSubprojectId, content);
+        // Проверить права на редактирование
+        const { data: subproject } = await supabase
+            .from('subprojects')
+            .select('project_id')
+            .eq('id', window.currentSubprojectId)
+            .single();
+        
+        const userId = getUserId();
+        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
+        
+        if (!canEdit) {
+            showNotification('У вас нет прав на добавление заметок', 'error');
+            return;
+        }
+        
+        await SubprojectNoteAPI.create({
+            subproject_id: window.currentSubprojectId,
+            content
+        });
         
         input.value = '';
-        
         showNotification('Заметка добавлена', 'success');
         await loadSubprojectNotes();
-        
         toggleSpNoteForm();
     } catch (error) {
         console.error('Ошибка добавления заметки:', error);
