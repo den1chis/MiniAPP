@@ -21,6 +21,32 @@ function getUserId() {
     }
     return userId;
 }
+const permissionCache = new Map();
+
+function getCacheKey(projectId, userId, resourceType, resourceId, needEdit) {
+    return `${projectId}_${userId}_${resourceType}_${resourceId || 'null'}_${needEdit}`;
+}
+
+function clearPermissionCache() {
+    permissionCache.clear();
+}
+
+// ========== ОБЪЯВЛЕНИЕ ГЛОБАЛЬНЫХ API ==========
+// Это нужно чтобы API были доступны из других файлов
+
+window.TaskAPI = null;
+window.ProjectAPI = null;
+window.NoteAPI = null;
+window.SubprojectAPI = null;
+window.MilestoneAPI = null;
+window.CustomFieldAPI = null;
+window.SpTableAPI = null;
+window.SubprojectNoteAPI = null;
+window.ProjectNoteAPI = null;
+window.ProjectMemberAPI = null;
+window.MemberPermissionAPI = null;
+window.getUserId = getUserId;
+window.clearPermissionCache = clearPermissionCache;
 // API функции для задач
 const TaskAPI = {
     async getAll() {
@@ -116,16 +142,7 @@ const TaskAPI = {
 };
 // ========== API для управления участниками проекта ==========
 // ========== КЕШ ПРАВ ДОСТУПА ==========
-const permissionCache = new Map();
 
-function getCacheKey(projectId, userId, resourceType, resourceId, needEdit) {
-    return `${projectId}_${userId}_${resourceType}_${resourceId || 'null'}_${needEdit}`;
-}
-
-// Очистить кеш (вызывать при изменении прав)
-function clearPermissionCache() {
-    permissionCache.clear();
-}
 const ProjectMemberAPI = {
     // Добавить участника с ролью
     async add(projectId, userId, role) {
@@ -1029,3 +1046,16 @@ const ProjectNoteAPI = {
 };
 
 
+window.TaskAPI = TaskAPI;
+window.ProjectAPI = ProjectAPI;
+window.NoteAPI = NoteAPI;
+window.SubprojectAPI = SubprojectAPI;
+window.MilestoneAPI = MilestoneAPI;
+window.CustomFieldAPI = CustomFieldAPI;
+window.SpTableAPI = SpTableAPI;
+window.SubprojectNoteAPI = SubprojectNoteAPI;
+window.ProjectNoteAPI = ProjectNoteAPI;
+window.ProjectMemberAPI = ProjectMemberAPI;
+window.MemberPermissionAPI = MemberPermissionAPI;
+
+console.log('✅ Supabase API загружен');

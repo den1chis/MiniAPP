@@ -1569,16 +1569,22 @@
             </div>
         </div>
     </div>
-    <!-- Подключение модулей -->
+<!-- Supabase CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- ВАЖНО: supabase.js ПЕРВЫМ -->
+    <script src="js/supabase.js"></script>
+
+    <!-- Остальные скрипты -->
     <script src="js/main.js"></script>
     <script src="js/navigation.js"></script>
-    <script src="js/kanban.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/calendar.js"></script>
     <script src="js/tasks.js"></script>
     <script src="js/projects.js"></script>
     <script src="js/workspace.js"></script>
     <script src="js/notes.js"></script>
+    <script src="js/kanban.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/calendar.js"></script>
     <script src="js/settings.js"></script>
     <script src="js/subprojects.js"></script>
     <script src="js/tables.js"></script>
