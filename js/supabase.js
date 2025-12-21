@@ -1,7 +1,6 @@
 // ========== ИНИЦИАЛИЗАЦИЯ SUPABASE ==========
 const SUPABASE_URL = 'https://pyibgdenhyxtetcdykdh.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5aWJnZGVuaHl4dGV0Y2R5a2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ2OTg2MzYsImV4cCI6MjA1MDI3NDYzNn0.zBO3vYYkflZKQYt1V_Y-JUjVCPaVNIV4hq4sBGv-fGM';
-
+const SUPABASE_KEY = 'sb_publishable_XbXckdwY3hPMSIB90v06Ng_Eer4zPU_';
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
