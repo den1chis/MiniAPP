@@ -97,35 +97,45 @@ async function deleteProject(id) {
 }
 
 // Обновить выпадающие списки проектов
-async function updateProjectSelects(projects) {
-    const selects = [
-        'taskProject',
-        'filterProject',
-        'kanbanFilterProject',
-        'calendarFilterProject'
-    ];
-    
-    selects.forEach(selectId => {
-        const select = document.getElementById(selectId);
-        if (!select) return;
+// Обновить списки выбора проектов
+async function updateProjectSelects() {
+    try {
+        const projects = await ProjectAPI.getAll();
         
-        const currentValue = select.value;
-        const defaultOption = select.querySelector('option[value=""]');
-        
-        select.innerHTML = '';
-        if (defaultOption) {
-            select.appendChild(defaultOption.cloneNode(true));
+        if (!projects || !Array.isArray(projects)) {
+            console.warn('Проекты не загружены');
+            return;
         }
         
-        projects.forEach(project => {
-            const option = document.createElement('option');
-            option.value = project.id;
-            option.textContent = `${project.icon} ${project.name}`;
-            select.appendChild(option);
-        });
+        const selects = [
+            'taskProject',
+            'filterProject',
+            'kanbanFilterProject',
+            'calendarFilterProject'
+        ];
         
-        select.value = currentValue;
-    });
+        selects.forEach(selectId => {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+            
+            const currentValue = select.value;
+            const firstOption = select.options[0];
+            
+            select.innerHTML = '';
+            if (firstOption) select.appendChild(firstOption.cloneNode(true));
+            
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = `${project.icon} ${project.name}`;
+                select.appendChild(option);
+            });
+            
+            select.value = currentValue;
+        });
+    } catch (error) {
+        console.error('Ошибка обновления списков проектов:', error);
+    }
 }
 
 // Открыть workspace проекта
