@@ -103,13 +103,13 @@ async function updateProjectSelects() {
         const projects = await ProjectAPI.getAll();
         
         if (!projects || !Array.isArray(projects)) {
-            console.warn('Проекты не загружены');
+            console.warn('Проекты не загружены или пусты');
             return;
         }
         
         const selects = [
             'taskProject',
-            'filterProject',
+            'filterProject', 
             'kanbanFilterProject',
             'calendarFilterProject'
         ];
@@ -122,19 +122,23 @@ async function updateProjectSelects() {
             const firstOption = select.options[0];
             
             select.innerHTML = '';
-            if (firstOption) select.appendChild(firstOption.cloneNode(true));
+            if (firstOption) {
+                select.appendChild(firstOption.cloneNode(true));
+            }
             
             projects.forEach(project => {
                 const option = document.createElement('option');
                 option.value = project.id;
-                option.textContent = `${project.icon} ${project.name}`;
+                option.textContent = `${project.icon || '📁'} ${project.name}`;
                 select.appendChild(option);
             });
             
-            select.value = currentValue;
+            if (currentValue) {
+                select.value = currentValue;
+            }
         });
     } catch (error) {
-        console.error('Ошибка обновления списков проектов:', error);
+        console.error('Ошибка обновления выпадающих списков проектов:', error);
     }
 }
 
