@@ -26,51 +26,61 @@ const TaskAPI = {
     async getAll() {
         const userId = getUserId();
         
-        // Свои задачи
-        const { data: myTasks, error: myError } = await supabase
-            .from('tasks')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-        
-        if (myError) throw myError;
-        
-        // Получить проекты, где я участник
-        const { data: memberRecords } = await supabase
-            .from('project_members')
-            .select('project_id, id')
-            .eq('user_id', userId)
-            .neq('role', 'owner');
-        
-        if (!memberRecords || memberRecords.length === 0) {
-            return myTasks || [];
-        }
-        
-        let sharedTasks = [];
-        
-        // Для каждого проекта проверить права на задачи
-        for (const member of memberRecords) {
-            const canView = await MemberPermissionAPI.canAccess(member.project_id, userId, 'tasks');
+        try {
+            // Свои задачи
+            const { data: myTasks, error: myError } = await supabase
+                .from('tasks')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
             
-            if (canView) {
-                // Загрузить задачи этого проекта
-                const { data: projectTasks } = await supabase
-                    .from('tasks')
-                    .select('*')
-                    .eq('project_id', member.project_id);
-                
-                if (projectTasks) {
-                    projectTasks.forEach(t => {
-                        t.isShared = true;
-                        sharedTasks.push(t);
-                    });
+            if (myError) throw myError;
+            
+            // Проекты, где я участник
+            const { data: memberRecords } = await supabase
+                .from('project_members')
+                .select('project_id, id')
+                .eq('user_id', userId)
+                .neq('role', 'owner');
+            
+            if (!memberRecords || memberRecords.length === 0) {
+                return myTasks || [];
+            }
+            
+            let sharedTasks = [];
+            
+            // Для каждого проекта проверить права
+            for (const member of memberRecords) {
+                try {
+                    const canView = await MemberPermissionAPI.canAccess(member.project_id, userId, 'tasks');
+                    
+                    if (canView) {
+                        const { data: projectTasks } = await supabase
+                            .from('tasks')
+                            .select('*')
+                            .eq('project_id', member.project_id);
+                        
+                        if (projectTasks) {
+                            projectTasks.forEach(t => {
+                                t.isShared = true;
+                                sharedTasks.push(t);
+                            });
+                        }
+                    }
+                } catch (err) {
+                    console.error(`Ошибка загрузки задач проекта ${member.project_id}:`, err);
+                    // Продолжить загрузку остальных
                 }
             }
+            
+            return [...(myTasks || []), ...sharedTasks];
+            
+        } catch (error) {
+            console.error('Критическая ошибка загрузки задач:', error);
+            return [];
         }
-        
-        return [...(myTasks || []), ...sharedTasks];
     },
-
+    
     async create(task) {
         const userId = getUserId();
         const { data, error } = await supabase
@@ -105,7 +115,17 @@ const TaskAPI = {
     }
 };
 // ========== API для управления участниками проекта ==========
+// ========== КЕШ ПРАВ ДОСТУПА ==========
+const permissionCache = new Map();
 
+function getCacheKey(projectId, userId, resourceType, resourceId, needEdit) {
+    return `${projectId}_${userId}_${resourceType}_${resourceId || 'null'}_${needEdit}`;
+}
+
+// Очистить кеш (вызывать при изменении прав)
+function clearPermissionCache() {
+    permissionCache.clear();
+}
 const ProjectMemberAPI = {
     // Добавить участника с ролью
     async add(projectId, userId, role) {
@@ -260,40 +280,64 @@ const MemberPermissionAPI = {
 
     // Проверить доступ к конкретному ресурсу
     async canAccess(projectId, userId, resourceType, resourceId = null, needEdit = false) {
-        const role = await ProjectMemberAPI.getRole(projectId, userId);
-        
-        // Владелец имеет полный доступ
-        if (role === 'owner') return true;
-        
-        if (!role) return false; // Не участник
-        
-        const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
-        if (!memberId) return false;
-        
-        // Проверить конкретные права
-        let query = supabase
-            .from('member_permissions')
-            .select('can_view, can_edit')
-            .eq('member_id', memberId)
-            .eq('resource_type', resourceType);
-        
-        // Проверить сначала конкретный ресурс, потом общие права
-        if (resourceId) {
-            const { data: specific } = await query.eq('resource_id', resourceId).single();
-            if (specific) {
-                return needEdit ? specific.can_edit : specific.can_view;
+        try {
+            // Проверить кеш
+            const cacheKey = getCacheKey(projectId, userId, resourceType, resourceId, needEdit);
+            if (permissionCache.has(cacheKey)) {
+                return permissionCache.get(cacheKey);
             }
+            
+            const role = await ProjectMemberAPI.getRole(projectId, userId);
+            
+            // Владелец имеет полный доступ
+            if (role === 'owner') {
+                permissionCache.set(cacheKey, true);
+                return true;
+            }
+            
+            if (!role) {
+                permissionCache.set(cacheKey, false);
+                return false;
+            }
+            
+            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+            if (!memberId) {
+                permissionCache.set(cacheKey, false);
+                return false;
+            }
+            
+            // Проверить права
+            let query = supabase
+                .from('member_permissions')
+                .select('can_view, can_edit')
+                .eq('member_id', memberId)
+                .eq('resource_type', resourceType);
+            
+            if (resourceId) {
+                const { data: specific, error: specError } = await query.eq('resource_id', resourceId).single();
+                if (!specError && specific) {
+                    const result = needEdit ? specific.can_edit : specific.can_view;
+                    permissionCache.set(cacheKey, result);
+                    return result;
+                }
+            }
+            
+            const { data: general, error: genError } = await query.is('resource_id', null).single();
+            if (!genError && general) {
+                const result = needEdit ? general.can_edit : general.can_view;
+                permissionCache.set(cacheKey, result);
+                return result;
+            }
+            
+            permissionCache.set(cacheKey, false);
+            return false;
+            
+        } catch (error) {
+            console.error('Ошибка проверки прав доступа:', error);
+            // При ошибке запретить доступ
+            return false;
         }
-        
-        // Проверить общие права на тип ресурса
-        const { data: general } = await query.is('resource_id', null).single();
-        if (general) {
-            return needEdit ? general.can_edit : general.can_view;
-        }
-        
-        // По умолчанию - нет доступа
-        return false;
-    },
+    },  
 
     // Удалить права
     async remove(memberId, resourceType, resourceId = null) {
@@ -376,89 +420,97 @@ const ProjectAPI = {
     async getAll() {
         const userId = getUserId();
         
-        // 1. Свои проекты (где я создатель)
-        const { data: myProjects, error: myError } = await supabase
-            .from('projects')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: false });
-        
-        if (myError) throw myError;
-        
-        // Добавить владельца в project_members для своих проектов (если еще нет)
-        for (const project of (myProjects || [])) {
-            const members = await ProjectMemberAPI.getMembers(project.id);
-            const ownerExists = members.some(m => m.user_id === userId && m.role === 'owner');
+        try {
+            // 1. Свои проекты
+            const { data: myProjects, error: myError } = await supabase
+                .from('projects')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false });
             
-            if (!ownerExists) {
-                await supabase
-                    .from('project_members')
-                    .insert([{
-                        project_id: project.id,
-                        user_id: userId,
-                        role: 'owner',
-                        invited_by: userId
-                    }]);
+            if (myError) throw myError;
+            
+            // 2. Проекты, где я участник
+            const { data: memberRecords, error: memberError } = await supabase
+                .from('project_members')
+                .select('project_id, role')
+                .eq('user_id', userId);
+            
+            if (memberError) {
+                console.error('Ошибка загрузки участников:', memberError);
+                // Не критично - просто вернуть свои проекты
+                return myProjects || [];
             }
+            
+            // Если нет записей участников - вернуть только свои
+            if (!memberRecords || memberRecords.length === 0) {
+                return myProjects || [];
+            }
+            
+            const sharedProjectIds = memberRecords
+                .filter(m => m.role !== 'owner')
+                .map(m => m.project_id);
+            
+            if (sharedProjectIds.length === 0) {
+                return myProjects || [];
+            }
+            
+            // 3. Загрузить расшаренные проекты
+            const { data: sharedProjects, error: sharedError } = await supabase
+                .from('projects')
+                .select('*')
+                .in('id', sharedProjectIds);
+            
+            if (sharedError) {
+                console.error('Ошибка загрузки расшаренных проектов:', sharedError);
+                return myProjects || [];
+            }
+            
+            // 4. Объединить
+            const allProjects = [...(myProjects || [])];
+            (sharedProjects || []).forEach(sp => {
+                const member = memberRecords.find(m => m.project_id === sp.id);
+                sp.memberRole = member?.role;
+                sp.isShared = true;
+                allProjects.push(sp);
+            });
+            
+            return allProjects;
+            
+        } catch (error) {
+            console.error('Критическая ошибка загрузки проектов:', error);
+            // Вернуть пустой массив вместо падения
+            return [];
         }
-        
-        // 2. Проекты, где я участник
-        const { data: memberRecords, error: memberError } = await supabase
-            .from('project_members')
-            .select('project_id, role')
-            .eq('user_id', userId);
-        
-        if (memberError) throw memberError;
-        
-        const sharedProjectIds = memberRecords
-            ?.filter(m => m.role !== 'owner')
-            .map(m => m.project_id) || [];
-        
-        if (sharedProjectIds.length === 0) {
-            return myProjects || [];
-        }
-        
-        const { data: sharedProjects, error: sharedError } = await supabase
-            .from('projects')
-            .select('*')
-            .in('id', sharedProjectIds);
-        
-        if (sharedError) throw sharedError;
-        
-        // Объединить и пометить
-        const allProjects = [...(myProjects || [])];
-        (sharedProjects || []).forEach(sp => {
-            const member = memberRecords.find(m => m.project_id === sp.id);
-            sp.memberRole = member?.role;
-            sp.isShared = true;
-            allProjects.push(sp);
-        });
-        
-        return allProjects;
     },
     
-    // Остальное без изменений
     async create(project) {
         const userId = getUserId();
-        const { data, error } = await supabase
-            .from('projects')
-            .insert([{ ...project, user_id: userId }])
-            .select()
-            .single();
         
-        if (error) throw error;
-        
-        // Автоматически добавить создателя как владельца
-        await supabase
-            .from('project_members')
-            .insert([{
-                project_id: data.id,
-                user_id: userId,
-                role: 'owner',
-                invited_by: userId
-            }]);
-        
-        return data;
+        try {
+            const { data, error } = await supabase
+                .from('projects')
+                .insert([{ ...project, user_id: userId }])
+                .select()
+                .single();
+            
+            if (error) throw error;
+            
+            // Добавить создателя как владельца
+            await supabase
+                .from('project_members')
+                .insert([{
+                    project_id: data.id,
+                    user_id: userId,
+                    role: 'owner',
+                    invited_by: userId
+                }]);
+            
+            return data;
+        } catch (error) {
+            console.error('Ошибка создания проекта:', error);
+            throw error;
+        }
     },
 
     async update(id, updates) {
@@ -481,7 +533,7 @@ const ProjectAPI = {
         
         if (error) throw error;
     }
-};  
+};
 // API функции для заметок
 const NoteAPI = {
     async getAll() {

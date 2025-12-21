@@ -3,10 +3,18 @@ async function loadProjects() {
     try {
         const projects = await ProjectAPI.getAll();
         renderProjects(projects);
-        updateProjectSelects(projects);
+        await updateProjectSelects();
     } catch (error) {
         console.error('Ошибка загрузки проектов:', error);
-        showNotification('Ошибка загрузки проектов', 'error');
+        document.getElementById('projectList').innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-red-600 mb-2">Ошибка загрузки проектов</p>
+                <p class="text-sm text-gray-500">${error.message || 'Неизвестная ошибка'}</p>
+                <button onclick="loadProjects()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Повторить попытку
+                </button>
+            </div>
+        `;
     }
 }
 

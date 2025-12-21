@@ -4,14 +4,12 @@ async function loadTasks() {
         const tasks = await TaskAPI.getAll();
         const projects = await ProjectAPI.getAll();
         
-        // Применяем фильтры
         const filterProject = document.getElementById('filterProject')?.value || '';
         const filterPriority = document.getElementById('filterPriority')?.value || '';
         const filterCompleted = document.getElementById('filterCompleted')?.value || '';
         
         let filtered = tasks;
         
-        // По умолчанию скрываем завершённые
         if (filterCompleted === 'false') {
             filtered = filtered.filter(t => !t.completed);
         } else if (filterCompleted === 'true') {
@@ -29,7 +27,15 @@ async function loadTasks() {
         updateTaskCounts(tasks);
     } catch (error) {
         console.error('Ошибка загрузки задач:', error);
-        showNotification('Ошибка загрузки задач', 'error');
+        document.getElementById('taskList').innerHTML = `
+            <div class="text-center py-8">
+                <p class="text-red-600 mb-2">Ошибка загрузки задач</p>
+                <p class="text-sm text-gray-500">${error.message || 'Неизвестная ошибка'}</p>
+                <button onclick="loadTasks()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Повторить попытку
+                </button>
+            </div>
+        `;
     }
 }
 
