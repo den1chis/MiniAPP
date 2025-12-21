@@ -487,14 +487,74 @@ const ProjectNoteAPI = {
 };
 
 // ========== API УЧАСТНИКОВ (УПРОЩЕННЫЙ) ==========
+// ========== API УЧАСТНИКОВ ПРОЕКТА (ПОЛНЫЙ) ==========
 const ProjectMemberAPI = {
+    async add(projectId, userId, role) {
+        const currentUserId = getUserId();
+        
+        const { data, error } = await supabaseClient
+            .from('project_members')
+            .insert([{
+                project_id: projectId,
+                user_id: String(userId),
+                role: role,
+                invited_by: currentUserId
+            }])
+            .select()
+            .single();
+        
+        if (error) {
+            if (error.code === '23505') {
+                throw new Error('Пользователь уже добавлен в проект');
+            }
+            throw error;
+        }
+        return data;
+    },
+
     async getMembers(projectId) {
-        const { data } = await supabaseClient
+        const { data, error } = await supabaseClient
             .from('project_members')
             .select('*')
-            .eq('project_id', projectId);
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: true });
         
+        if (error) throw error;
         return data || [];
+    },
+
+    async remove(projectId, userId) {
+        const { error } = await supabaseClient
+            .from('project_members')
+            .delete()
+            .eq('project_id', projectId)
+            .eq('user_id', userId);
+        
+        if (error) throw error;
+    },
+
+    async updateRole(projectId, userId, newRole) {
+        const { data, error } = await supabaseClient
+            .from('project_members')
+            .update({ role: newRole })
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .select()
+            .single();
+        
+        if (error) throw error;
+        return data;
+    },
+
+    async isOwner(projectId, userId) {
+        const { data } = await supabaseClient
+            .from('project_members')
+            .select('role')
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .single();
+        
+        return data?.role === 'owner';
     },
 
     async getRole(projectId, userId) {
@@ -508,18 +568,110 @@ const ProjectMemberAPI = {
         return data?.role || null;
     },
 
-    async isOwner(projectId, userId) {
-        const role = await this.getRole(projectId, userId);
-        return role === 'owner';
+    async getMemberId(projectId, userId) {
+        const { data } = await supabaseClient
+            .from('project_members')
+            .select('id')
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .single();
+        
+        return data?.id || null;
     }
 };
 
 const MemberPermissionAPI = {
-    async canAccess() {
-        return true; // Временно все разрешено
+    async set(memberId, resourceType, canView, canEdit, resourceId = null) {
+        const { data, error } = await supabaseClient
+            .from('member_permissions')
+            .upsert([{
+                member_id: memberId,
+                resource_type: resourceType,
+                resource_id: resourceId,
+                can_view: canView,
+                can_edit: canEdit
+            }], { onConflict: 'member_id,resource_type,resource_id' })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        return data;
+    },
+
+    async get(memberId) {
+        const { data, error } = await supabaseClient
+            .from('member_permissions')
+            .select('*')
+            .eq('member_id', memberId);
+        
+        if (error) throw error;
+        return data || [];
+    },
+
+    async canAccess(projectId, userId, resourceType, resourceId = null, needEdit = false) {
+        try {
+            const role = await ProjectMemberAPI.getRole(projectId, userId);
+            
+            if (role === 'owner') {
+                return true;
+            }
+            
+            if (!role) {
+                return false;
+            }
+            
+            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+            if (!memberId) {
+                return false;
+            }
+            
+            let query = supabaseClient
+                .from('member_permissions')
+                .select('can_view, can_edit')
+                .eq('member_id', memberId)
+                .eq('resource_type', resourceType);
+            
+            if (resourceId) {
+                const { data: specific } = await query.eq('resource_id', resourceId).single();
+                if (specific) {
+                    return needEdit ? specific.can_edit : specific.can_view;
+                }
+            }
+            
+            const { data: general } = await query.is('resource_id', null).single();
+            if (general) {
+                return needEdit ? general.can_edit : general.can_view;
+            }
+            
+            return false;
+            
+        } catch (error) {
+            console.error('Ошибка проверки прав:', error);
+            return false;
+        }
+    },
+
+    async remove(memberId, resourceType, resourceId = null) {
+        let query = supabaseClient
+            .from('member_permissions')
+            .delete()
+            .eq('member_id', memberId)
+            .eq('resource_type', resourceType);
+        
+        if (resourceId) {
+            query = query.eq('resource_id', resourceId);
+        } else {
+            query = query.is('resource_id', null);
+        }
+        
+        const { error } = await query;
+        if (error) throw error;
     }
 };
 
+
+
+// ========== ЭКСПОРТ ==========
 // ========== ЭКСПОРТ ==========
 window.TaskAPI = TaskAPI;
 window.ProjectAPI = ProjectAPI;
@@ -533,5 +685,6 @@ window.ProjectNoteAPI = ProjectNoteAPI;
 window.ProjectMemberAPI = ProjectMemberAPI;
 window.MemberPermissionAPI = MemberPermissionAPI;
 window.getUserId = getUserId;
+window.clearPermissionCache = clearPermissionCache;
 
 console.log('✅ Supabase API загружен успешно');
