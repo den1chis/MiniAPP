@@ -1,6 +1,7 @@
 // ========== ИНИЦИАЛИЗАЦИЯ SUPABASE ==========
 const SUPABASE_URL = 'https://pyibgdenhyxtetcdykdh.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5aWJnZGVuaHl4dGV0Y2R5a2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4MDgxMTksImV4cCI6MjA4MTM4NDExOX0.Q_rZuNreW3ytgh3XekTbvct_xu2_ccfsb4BnnjZjaQU';
+
 const { createClient } = window.supabase;
 const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -486,8 +487,7 @@ const ProjectNoteAPI = {
     }
 };
 
-// ========== API УЧАСТНИКОВ (УПРОЩЕННЫЙ) ==========
-// ========== API УЧАСТНИКОВ ПРОЕКТА (ПОЛНЫЙ) ==========
+// ========== API УЧАСТНИКОВ ПРОЕКТА ==========
 const ProjectMemberAPI = {
     async add(projectId, userId, role) {
         const currentUserId = getUserId();
@@ -580,6 +580,7 @@ const ProjectMemberAPI = {
     }
 };
 
+// ========== API ПРАВ УЧАСТНИКОВ ==========
 const MemberPermissionAPI = {
     async set(memberId, resourceType, canView, canEdit, resourceId = null) {
         const { data, error } = await supabaseClient
@@ -610,18 +611,26 @@ const MemberPermissionAPI = {
 
     async canAccess(projectId, userId, resourceType, resourceId = null, needEdit = false) {
         try {
+            const cacheKey = getCacheKey(projectId, userId, resourceType, resourceId, needEdit);
+            if (permissionCache.has(cacheKey)) {
+                return permissionCache.get(cacheKey);
+            }
+            
             const role = await ProjectMemberAPI.getRole(projectId, userId);
             
             if (role === 'owner') {
+                permissionCache.set(cacheKey, true);
                 return true;
             }
             
             if (!role) {
+                permissionCache.set(cacheKey, false);
                 return false;
             }
             
             const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
             if (!memberId) {
+                permissionCache.set(cacheKey, false);
                 return false;
             }
             
@@ -634,15 +643,20 @@ const MemberPermissionAPI = {
             if (resourceId) {
                 const { data: specific } = await query.eq('resource_id', resourceId).single();
                 if (specific) {
-                    return needEdit ? specific.can_edit : specific.can_view;
+                    const result = needEdit ? specific.can_edit : specific.can_view;
+                    permissionCache.set(cacheKey, result);
+                    return result;
                 }
             }
             
             const { data: general } = await query.is('resource_id', null).single();
             if (general) {
-                return needEdit ? general.can_edit : general.can_view;
+                const result = needEdit ? general.can_edit : general.can_view;
+                permissionCache.set(cacheKey, result);
+                return result;
             }
             
+            permissionCache.set(cacheKey, false);
             return false;
             
         } catch (error) {
@@ -669,9 +683,6 @@ const MemberPermissionAPI = {
     }
 };
 
-
-
-// ========== ЭКСПОРТ ==========
 // ========== ЭКСПОРТ ==========
 window.TaskAPI = TaskAPI;
 window.ProjectAPI = ProjectAPI;
@@ -687,4 +698,4 @@ window.MemberPermissionAPI = MemberPermissionAPI;
 window.getUserId = getUserId;
 window.clearPermissionCache = clearPermissionCache;
 
-console.log('✅ Supabase API загружен успешно');
+console.log('✅ Supabase API с шарингом загружен успешно');
