@@ -1,26 +1,25 @@
-// Supabase конфигурация
+// ========== ИНИЦИАЛИЗАЦИЯ SUPABASE ==========
 const SUPABASE_URL = 'https://pyibgdenhyxtetcdykdh.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5aWJnZGVuaHl4dGV0Y2R5a2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU4MDgxMTksImV4cCI6MjA4MTM4NDExOX0.Q_rZuNreW3ytgh3XekTbvct_xu2_ccfsb4BnnjZjaQU';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB5aWJnZGVuaHl4dGV0Y2R5a2RoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzQ2OTg2MzYsImV4cCI6MjA1MDI3NDYzNn0.zBO3vYYkflZKQYt1V_Y-JUjVCPaVNIV4hq4sBGv-fGM';
 
-// Инициализация клиента
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const { createClient } = window.supabase;
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Получить ID пользователя из Telegram
-// Получить ID пользователя из Telegram
+// Получить ID пользователя
 function getUserId() {
-    // Попытка получить ID из Telegram WebApp
     if (window.Telegram?.WebApp?.initDataUnsafe?.user?.id) {
         return String(window.Telegram.WebApp.initDataUnsafe.user.id);
     }
     
-    // Для тестирования вне Telegram - фиксированный ID
     let userId = localStorage.getItem('fixed_user_id');
     if (!userId) {
-        userId = 'test_user_demo'; // Фиксированный ID для теста
+        userId = 'test_user_demo';
         localStorage.setItem('fixed_user_id', userId);
     }
     return userId;
 }
+
+// ========== КЕШ ПРАВ ДОСТУПА ==========
 const permissionCache = new Map();
 
 function getCacheKey(projectId, userId, resourceType, resourceId, needEdit) {
@@ -31,29 +30,12 @@ function clearPermissionCache() {
     permissionCache.clear();
 }
 
-// ========== ОБЪЯВЛЕНИЕ ГЛОБАЛЬНЫХ API ==========
-// Это нужно чтобы API были доступны из других файлов
-
-window.TaskAPI = null;
-window.ProjectAPI = null;
-window.NoteAPI = null;
-window.SubprojectAPI = null;
-window.MilestoneAPI = null;
-window.CustomFieldAPI = null;
-window.SpTableAPI = null;
-window.SubprojectNoteAPI = null;
-window.ProjectNoteAPI = null;
-window.ProjectMemberAPI = null;
-window.MemberPermissionAPI = null;
-window.getUserId = getUserId;
-window.clearPermissionCache = clearPermissionCache;
-// API функции для задач
+// ========== API ЗАДАЧ ==========
 const TaskAPI = {
     async getAll() {
         const userId = getUserId();
         
         try {
-            // Свои задачи
             const { data: myTasks, error: myError } = await supabase
                 .from('tasks')
                 .select('*')
@@ -62,7 +44,6 @@ const TaskAPI = {
             
             if (myError) throw myError;
             
-            // Проекты, где я участник
             const { data: memberRecords } = await supabase
                 .from('project_members')
                 .select('project_id, id')
@@ -75,7 +56,6 @@ const TaskAPI = {
             
             let sharedTasks = [];
             
-            // Для каждого проекта проверить права
             for (const member of memberRecords) {
                 try {
                     const canView = await MemberPermissionAPI.canAccess(member.project_id, userId, 'tasks');
@@ -95,7 +75,6 @@ const TaskAPI = {
                     }
                 } catch (err) {
                     console.error(`Ошибка загрузки задач проекта ${member.project_id}:`, err);
-                    // Продолжить загрузку остальных
                 }
             }
             
@@ -140,305 +119,13 @@ const TaskAPI = {
         if (error) throw error;
     }
 };
-// ========== API для управления участниками проекта ==========
-// ========== КЕШ ПРАВ ДОСТУПА ==========
 
-const ProjectMemberAPI = {
-    // Добавить участника с ролью
-    async add(projectId, userId, role) {
-        const currentUserId = getUserId();
-        
-        // Проверить, что текущий пользователь - владелец
-        const isOwner = await this.isOwner(projectId, currentUserId);
-        if (!isOwner) {
-            throw new Error('Только владелец может добавлять участников');
-        }
-        
-        const { data, error } = await supabase
-            .from('project_members')
-            .insert([{
-                project_id: projectId,
-                user_id: String(userId),
-                role: role,
-                invited_by: currentUserId
-            }])
-            .select()
-            .single();
-        
-        if (error) {
-            if (error.code === '23505') {
-                throw new Error('Пользователь уже добавлен в проект');
-            }
-            throw error;
-        }
-        return data;
-    },
-
-    // Получить участников проекта
-    async getMembers(projectId) {
-        const { data, error } = await supabase
-            .from('project_members')
-            .select('*')
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: true });
-        
-        if (error) throw error;
-        return data || [];
-    },
-
-    // Удалить участника
-    async remove(projectId, userId) {
-        const currentUserId = getUserId();
-        const isOwner = await this.isOwner(projectId, currentUserId);
-        
-        if (!isOwner) {
-            throw new Error('Только владелец может удалять участников');
-        }
-        
-        const { error } = await supabase
-            .from('project_members')
-            .delete()
-            .eq('project_id', projectId)
-            .eq('user_id', userId);
-        
-        if (error) throw error;
-    },
-
-    // Обновить роль
-    async updateRole(projectId, userId, newRole) {
-        const currentUserId = getUserId();
-        const isOwner = await this.isOwner(projectId, currentUserId);
-        
-        if (!isOwner) {
-            throw new Error('Только владелец может изменять роли');
-        }
-        
-        const { data, error } = await supabase
-            .from('project_members')
-            .update({ role: newRole })
-            .eq('project_id', projectId)
-            .eq('user_id', userId)
-            .select()
-            .single();
-        
-        if (error) throw error;
-        return data;
-    },
-
-    // Проверить, является ли пользователь владельцем
-    async isOwner(projectId, userId) {
-        const { data, error } = await supabase
-            .from('project_members')
-            .select('role')
-            .eq('project_id', projectId)
-            .eq('user_id', userId)
-            .single();
-        
-        if (error && error.code !== 'PGRST116') throw error;
-        return data?.role === 'owner';
-    },
-
-    // Получить роль пользователя в проекте
-    async getRole(projectId, userId) {
-        const { data, error } = await supabase
-            .from('project_members')
-            .select('role')
-            .eq('project_id', projectId)
-            .eq('user_id', userId)
-            .single();
-        
-        if (error && error.code !== 'PGRST116') throw error;
-        return data?.role || null;
-    },
-
-    // Получить ID участника
-    async getMemberId(projectId, userId) {
-        const { data, error } = await supabase
-            .from('project_members')
-            .select('id')
-            .eq('project_id', projectId)
-            .eq('user_id', userId)
-            .single();
-        
-        if (error && error.code !== 'PGRST116') throw error;
-        return data?.id || null;
-    }
-};
-
-const MemberPermissionAPI = {
-    // Установить права на ресурс
-    async set(memberId, resourceType, canView, canEdit, resourceId = null) {
-        const { data, error } = await supabase
-            .from('member_permissions')
-            .upsert([{
-                member_id: memberId,
-                resource_type: resourceType,
-                resource_id: resourceId,
-                can_view: canView,
-                can_edit: canEdit
-            }], { onConflict: 'member_id,resource_type,resource_id' })
-            .select()
-            .single();
-        
-        if (error) throw error;
-        return data;
-    },
-
-    // Получить права участника
-    async get(memberId) {
-        const { data, error } = await supabase
-            .from('member_permissions')
-            .select('*')
-            .eq('member_id', memberId);
-        
-        if (error) throw error;
-        return data || [];
-    },
-
-    // Проверить доступ к конкретному ресурсу
-    async canAccess(projectId, userId, resourceType, resourceId = null, needEdit = false) {
-        try {
-            // Проверить кеш
-            const cacheKey = getCacheKey(projectId, userId, resourceType, resourceId, needEdit);
-            if (permissionCache.has(cacheKey)) {
-                return permissionCache.get(cacheKey);
-            }
-            
-            const role = await ProjectMemberAPI.getRole(projectId, userId);
-            
-            // Владелец имеет полный доступ
-            if (role === 'owner') {
-                permissionCache.set(cacheKey, true);
-                return true;
-            }
-            
-            if (!role) {
-                permissionCache.set(cacheKey, false);
-                return false;
-            }
-            
-            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
-            if (!memberId) {
-                permissionCache.set(cacheKey, false);
-                return false;
-            }
-            
-            // Проверить права
-            let query = supabase
-                .from('member_permissions')
-                .select('can_view, can_edit')
-                .eq('member_id', memberId)
-                .eq('resource_type', resourceType);
-            
-            if (resourceId) {
-                const { data: specific, error: specError } = await query.eq('resource_id', resourceId).single();
-                if (!specError && specific) {
-                    const result = needEdit ? specific.can_edit : specific.can_view;
-                    permissionCache.set(cacheKey, result);
-                    return result;
-                }
-            }
-            
-            const { data: general, error: genError } = await query.is('resource_id', null).single();
-            if (!genError && general) {
-                const result = needEdit ? general.can_edit : general.can_view;
-                permissionCache.set(cacheKey, result);
-                return result;
-            }
-            
-            permissionCache.set(cacheKey, false);
-            return false;
-            
-        } catch (error) {
-            console.error('Ошибка проверки прав доступа:', error);
-            // При ошибке запретить доступ
-            return false;
-        }
-    },  
-
-    // Удалить права
-    async remove(memberId, resourceType, resourceId = null) {
-        let query = supabase
-            .from('member_permissions')
-            .delete()
-            .eq('member_id', memberId)
-            .eq('resource_type', resourceType);
-        
-        if (resourceId) {
-            query = query.eq('resource_id', resourceId);
-        } else {
-            query = query.is('resource_id', null);
-        }
-        
-        const { error } = await query;
-        if (error) throw error;
-    }
-};
-// API функции для проектов
-// API для шаринга проектов
-const ProjectShareAPI = {
-    async share(projectId, telegramId) {
-        const userId = getUserId();
-        const { data, error } = await supabase
-            .from('project_shares')
-            .insert([{
-                project_id: projectId,
-                owner_id: userId,
-                shared_with_id: String(telegramId),
-                can_edit: true
-            }])
-            .select()
-            .single();
-        
-        if (error) {
-            // Если уже расшарен, игнорируем ошибку
-            if (error.code === '23505') {
-                throw new Error('Проект уже расшарен с этим пользователем');
-            }
-            throw error;
-        }
-        return data;
-    },
-
-    async getSharedProjects() {
-        const userId = getUserId();
-        const { data, error } = await supabase
-            .from('project_shares')
-            .select('project_id')
-            .eq('shared_with_id', userId);
-        
-        if (error) throw error;
-        return data || [];
-    },
-
-    async getProjectShares(projectId) {
-        const { data, error } = await supabase
-            .from('project_shares')
-            .select('*')
-            .eq('project_id', projectId);
-        
-        if (error) throw error;
-        return data || [];
-    },
-
-    async removeShare(projectId, sharedWithId) {
-        const { error } = await supabase
-            .from('project_shares')
-            .delete()
-            .eq('project_id', projectId)
-            .eq('shared_with_id', sharedWithId);
-        
-        if (error) throw error;
-    }
-};
-
-// Обновите ProjectAPI.getAll:
+// ========== API ПРОЕКТОВ ==========
 const ProjectAPI = {
     async getAll() {
         const userId = getUserId();
         
         try {
-            // 1. Свои проекты
             const { data: myProjects, error: myError } = await supabase
                 .from('projects')
                 .select('*')
@@ -447,7 +134,6 @@ const ProjectAPI = {
             
             if (myError) throw myError;
             
-            // 2. Проекты, где я участник
             const { data: memberRecords, error: memberError } = await supabase
                 .from('project_members')
                 .select('project_id, role')
@@ -455,11 +141,9 @@ const ProjectAPI = {
             
             if (memberError) {
                 console.error('Ошибка загрузки участников:', memberError);
-                // Не критично - просто вернуть свои проекты
                 return myProjects || [];
             }
             
-            // Если нет записей участников - вернуть только свои
             if (!memberRecords || memberRecords.length === 0) {
                 return myProjects || [];
             }
@@ -472,7 +156,6 @@ const ProjectAPI = {
                 return myProjects || [];
             }
             
-            // 3. Загрузить расшаренные проекты
             const { data: sharedProjects, error: sharedError } = await supabase
                 .from('projects')
                 .select('*')
@@ -483,7 +166,6 @@ const ProjectAPI = {
                 return myProjects || [];
             }
             
-            // 4. Объединить
             const allProjects = [...(myProjects || [])];
             (sharedProjects || []).forEach(sp => {
                 const member = memberRecords.find(m => m.project_id === sp.id);
@@ -496,7 +178,6 @@ const ProjectAPI = {
             
         } catch (error) {
             console.error('Критическая ошибка загрузки проектов:', error);
-            // Вернуть пустой массив вместо падения
             return [];
         }
     },
@@ -513,7 +194,6 @@ const ProjectAPI = {
             
             if (error) throw error;
             
-            // Добавить создателя как владельца
             await supabase
                 .from('project_members')
                 .insert([{
@@ -551,22 +231,20 @@ const ProjectAPI = {
         if (error) throw error;
     }
 };
-// API функции для заметок
+
+// ========== API ЗАМЕТОК ==========
 const NoteAPI = {
     async getAll() {
         const userId = getUserId();
         
-        // Свои заметки
-        const { data: myNotes, error } = await supabase
+        const { data, error } = await supabase
             .from('notes')
             .select('*')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
         
         if (error) throw error;
-        
-        // Заметки из расшаренных проектов будут загружаться отдельно в ProjectNoteAPI
-        return myNotes || [];
+        return data || [];
     },
     
     async create(note) {
@@ -603,61 +281,60 @@ const NoteAPI = {
     }
 };
 
-// API для подпроектов
+// ========== API ПОДПРОЕКТОВ ==========
 const SubprojectAPI = {
     async getAll(projectId) {
         const userId = getUserId();
         
-        // Свои подпроекты
-        const { data: mySubprojects, error: myError } = await supabase
-            .from('subprojects')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: false });
-        
-        if (myError) throw myError;
-        
-        // Проверить, участник ли пользователь этого проекта
-        const role = await ProjectMemberAPI.getRole(projectId, userId);
-        
-        if (!role || role === 'owner') {
-            // Владелец или не участник - только свои подпроекты
-            return mySubprojects || [];
+        try {
+            const { data: mySubprojects, error: myError } = await supabase
+                .from('subprojects')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('project_id', projectId)
+                .order('created_at', { ascending: false});
+            
+            if (myError) throw myError;
+            
+            const role = await ProjectMemberAPI.getRole(projectId, userId);
+            
+            if (!role || role === 'owner') {
+                return mySubprojects || [];
+            }
+            
+            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+            if (!memberId) return mySubprojects || [];
+            
+            const permissions = await MemberPermissionAPI.get(memberId);
+            const allowedSubprojectIds = permissions
+                .filter(p => p.resource_type === 'subproject' && p.can_view && p.resource_id !== null)
+                .map(p => p.resource_id);
+            
+            if (allowedSubprojectIds.length === 0) {
+                return mySubprojects || [];
+            }
+            
+            const { data: sharedSubprojects, error: sharedError } = await supabase
+                .from('subprojects')
+                .select('*')
+                .in('id', allowedSubprojectIds)
+                .eq('project_id', projectId);
+            
+            if (sharedError) throw sharedError;
+            
+            const allSubprojects = [...(mySubprojects || [])];
+            (sharedSubprojects || []).forEach(sp => {
+                sp.isShared = true;
+                allSubprojects.push(sp);
+            });
+            
+            return allSubprojects;
+        } catch (error) {
+            console.error('Ошибка загрузки подпроектов:', error);
+            return [];
         }
-        
-        // Получить ID участника
-        const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
-        if (!memberId) return mySubprojects || [];
-        
-        // Получить разрешения на подпроекты
-        const permissions = await MemberPermissionAPI.get(memberId);
-        const allowedSubprojectIds = permissions
-            .filter(p => p.resource_type === 'subproject' && p.can_view && p.resource_id !== null)
-            .map(p => p.resource_id);
-        
-        if (allowedSubprojectIds.length === 0) {
-            return mySubprojects || [];
-        }
-        
-        // Загрузить расшаренные подпроекты
-        const { data: sharedSubprojects, error: sharedError } = await supabase
-            .from('subprojects')
-            .select('*')
-            .in('id', allowedSubprojectIds)
-            .eq('project_id', projectId);
-        
-        if (sharedError) throw sharedError;
-        
-        const allSubprojects = [...(mySubprojects || [])];
-        (sharedSubprojects || []).forEach(sp => {
-            sp.isShared = true;
-            allSubprojects.push(sp);
-        });
-        
-        return allSubprojects;
     },
-
+    
     async create(subproject) {
         const userId = getUserId();
         const { data, error } = await supabase
@@ -692,16 +369,14 @@ const SubprojectAPI = {
     }
 };
 
-// API для milestones
+// ========== API ЭТАПОВ (MILESTONES) ==========
 const MilestoneAPI = {
     async getAll(projectId) {
         const userId = getUserId();
         
-        // Проверить права на roadmap
         const canView = await MemberPermissionAPI.canAccess(projectId, userId, 'roadmap');
         
         if (!canView) {
-            // Нет прав - вернуть пустой массив
             return [];
         }
         
@@ -769,11 +444,11 @@ const MilestoneAPI = {
     }
 };
 
+// ========== API ПОЛЬЗОВАТЕЛЬСКИХ ПОЛЕЙ ==========
 const CustomFieldAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
         
-        // Проверить доступ к подпроекту
         const { data: subproject } = await supabase
             .from('subprojects')
             .select('project_id')
@@ -830,12 +505,11 @@ const CustomFieldAPI = {
     }
 };
 
-// API для таблиц подпроектов
+// ========== API ТАБЛИЦ ПОДПРОЕКТОВ ==========
 const SpTableAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
         
-        // Проверить доступ к подпроекту
         const { data: subproject } = await supabase
             .from('subprojects')
             .select('project_id')
@@ -882,7 +556,6 @@ const SpTableAPI = {
     async getRows(tableId) {
         const userId = getUserId();
         
-        // Получить таблицу и проверить доступ
         const { data: table } = await supabase
             .from('sp_tables')
             .select('subproject_id')
@@ -951,12 +624,11 @@ const SpTableAPI = {
     }
 };
 
-// API для заметок подпроектов
+// ========== API ЗАМЕТОК ПОДПРОЕКТА ==========
 const SubprojectNoteAPI = {
     async getAll(subprojectId) {
         const userId = getUserId();
         
-        // Проверить доступ к подпроекту
         const { data: subproject } = await supabase
             .from('subprojects')
             .select('project_id')
@@ -1001,12 +673,11 @@ const SubprojectNoteAPI = {
     }
 };
 
-// API для заметок проектов
+// ========== API ЗАМЕТОК ПРОЕКТА ==========
 const ProjectNoteAPI = {
     async getAll(projectId) {
         const userId = getUserId();
         
-        // Проверить права на заметки
         const canView = await MemberPermissionAPI.canAccess(projectId, userId, 'notes');
         
         if (!canView) {
@@ -1045,7 +716,225 @@ const ProjectNoteAPI = {
     }
 };
 
+// ========== API УЧАСТНИКОВ ПРОЕКТА ==========
+const ProjectMemberAPI = {
+    async add(projectId, userId, role) {
+        const currentUserId = getUserId();
+        
+        const isOwner = await this.isOwner(projectId, currentUserId);
+        if (!isOwner) {
+            throw new Error('Только владелец может добавлять участников');
+        }
+        
+        const { data, error } = await supabase
+            .from('project_members')
+            .insert([{
+                project_id: projectId,
+                user_id: String(userId),
+                role: role,
+                invited_by: currentUserId
+            }])
+            .select()
+            .single();
+        
+        if (error) {
+            if (error.code === '23505') {
+                throw new Error('Пользователь уже добавлен в проект');
+            }
+            throw error;
+        }
+        return data;
+    },
 
+    async getMembers(projectId) {
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: true });
+        
+        if (error) throw error;
+        return data || [];
+    },
+
+    async remove(projectId, userId) {
+        const currentUserId = getUserId();
+        const isOwner = await this.isOwner(projectId, currentUserId);
+        
+        if (!isOwner) {
+            throw new Error('Только владелец может удалять участников');
+        }
+        
+        const { error } = await supabase
+            .from('project_members')
+            .delete()
+            .eq('project_id', projectId)
+            .eq('user_id', userId);
+        
+        if (error) throw error;
+    },
+
+    async updateRole(projectId, userId, newRole) {
+        const currentUserId = getUserId();
+        const isOwner = await this.isOwner(projectId, currentUserId);
+        
+        if (!isOwner) {
+            throw new Error('Только владелец может изменять роли');
+        }
+        
+        const { data, error } = await supabase
+            .from('project_members')
+            .update({ role: newRole })
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .select()
+            .single();
+        
+        if (error) throw error;
+        return data;
+    },
+
+    async isOwner(projectId, userId) {
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('role')
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') throw error;
+        return data?.role === 'owner';
+    },
+
+    async getRole(projectId, userId) {
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('role')
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') throw error;
+        return data?.role || null;
+    },
+
+    async getMemberId(projectId, userId) {
+        const { data, error } = await supabase
+            .from('project_members')
+            .select('id')
+            .eq('project_id', projectId)
+            .eq('user_id', userId)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') throw error;
+        return data?.id || null;
+    }
+};
+
+// ========== API ПРАВ УЧАСТНИКОВ ==========
+const MemberPermissionAPI = {
+    async set(memberId, resourceType, canView, canEdit, resourceId = null) {
+        const { data, error } = await supabase
+            .from('member_permissions')
+            .upsert([{
+                member_id: memberId,
+                resource_type: resourceType,
+                resource_id: resourceId,
+                can_view: canView,
+                can_edit: canEdit
+            }], { onConflict: 'member_id,resource_type,resource_id' })
+            .select()
+            .single();
+        
+        if (error) throw error;
+        return data;
+    },
+
+    async get(memberId) {
+        const { data, error } = await supabase
+            .from('member_permissions')
+            .select('*')
+            .eq('member_id', memberId);
+        
+        if (error) throw error;
+        return data || [];
+    },
+
+    async canAccess(projectId, userId, resourceType, resourceId = null, needEdit = false) {
+        try {
+            const cacheKey = getCacheKey(projectId, userId, resourceType, resourceId, needEdit);
+            if (permissionCache.has(cacheKey)) {
+                return permissionCache.get(cacheKey);
+            }
+            
+            const role = await ProjectMemberAPI.getRole(projectId, userId);
+            
+            if (role === 'owner') {
+                permissionCache.set(cacheKey, true);
+                return true;
+            }
+            
+            if (!role) {
+                permissionCache.set(cacheKey, false);
+                return false;
+            }
+            
+            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+            if (!memberId) {
+                permissionCache.set(cacheKey, false);
+                return false;
+            }
+            
+            let query = supabase
+                .from('member_permissions')
+                .select('can_view, can_edit')
+                .eq('member_id', memberId)
+                .eq('resource_type', resourceType);
+            
+            if (resourceId) {
+                const { data: specific, error: specError } = await query.eq('resource_id', resourceId).single();
+                if (!specError && specific) {
+                    const result = needEdit ? specific.can_edit : specific.can_view;
+                    permissionCache.set(cacheKey, result);
+                    return result;
+                }
+            }
+            
+            const { data: general, error: genError } = await query.is('resource_id', null).single();
+            if (!genError && general) {
+                const result = needEdit ? general.can_edit : general.can_view;
+                permissionCache.set(cacheKey, result);
+                return result;
+            }
+            
+            permissionCache.set(cacheKey, false);
+            return false;
+            
+        } catch (error) {
+            console.error('Ошибка проверки прав доступа:', error);
+            return false;
+        }
+    },
+
+    async remove(memberId, resourceType, resourceId = null) {
+        let query = supabase
+            .from('member_permissions')
+            .delete()
+            .eq('member_id', memberId)
+            .eq('resource_type', resourceType);
+        
+        if (resourceId) {
+            query = query.eq('resource_id', resourceId);
+        } else {
+            query = query.is('resource_id', null);
+        }
+        
+        const { error } = await query;
+        if (error) throw error;
+    }
+};
+
+// ========== ЭКСПОРТ В ГЛОБАЛЬНУЮ ОБЛАСТЬ ==========
 window.TaskAPI = TaskAPI;
 window.ProjectAPI = ProjectAPI;
 window.NoteAPI = NoteAPI;
@@ -1057,5 +946,7 @@ window.SubprojectNoteAPI = SubprojectNoteAPI;
 window.ProjectNoteAPI = ProjectNoteAPI;
 window.ProjectMemberAPI = ProjectMemberAPI;
 window.MemberPermissionAPI = MemberPermissionAPI;
+window.getUserId = getUserId;
+window.clearPermissionCache = clearPermissionCache;
 
 console.log('✅ Supabase API загружен');
