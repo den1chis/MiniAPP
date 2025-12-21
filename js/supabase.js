@@ -89,13 +89,50 @@ const ProjectAPI = {
         const userId = getUserId();
         
         try {
+            // 1. Свои проекты
             const { data: myProjects } = await supabaseClient
                 .from('projects')
                 .select('*')
                 .eq('user_id', userId)
                 .order('created_at', { ascending: false });
             
-            return myProjects || [];
+            // 2. Проекты где я участник
+            const { data: memberRecords } = await supabaseClient
+                .from('project_members')
+                .select('project_id, role')
+                .eq('user_id', userId);
+            
+            if (!memberRecords || memberRecords.length === 0) {
+                return myProjects || [];
+            }
+            
+            // Найти ID расшаренных проектов (где я не владелец)
+            const sharedProjectIds = memberRecords
+                .filter(m => m.role !== 'owner')
+                .map(m => m.project_id);
+            
+            if (sharedProjectIds.length === 0) {
+                return myProjects || [];
+            }
+            
+            // 3. Загрузить расшаренные проекты
+            const { data: sharedProjects } = await supabaseClient
+                .from('projects')
+                .select('*')
+                .in('id', sharedProjectIds);
+            
+            // 4. Объединить
+            const allProjects = [...(myProjects || [])];
+            
+            (sharedProjects || []).forEach(sp => {
+                const member = memberRecords.find(m => m.project_id === sp.id);
+                sp.memberRole = member?.role; // Пометить роль
+                sp.isShared = true; // Пометить что расшарен
+                allProjects.push(sp);
+            });
+            
+            return allProjects;
+            
         } catch (error) {
             console.error('Ошибка загрузки проектов:', error);
             return [];
@@ -189,15 +226,55 @@ const SubprojectAPI = {
     async getAll(projectId) {
         const userId = getUserId();
         
-        const { data, error } = await supabaseClient
-            .from('subprojects')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: false});
-        
-        if (error) throw error;
-        return data || [];
+        try {
+            // Свои подпроекты
+            const { data: mySubprojects } = await supabaseClient
+                .from('subprojects')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('project_id', projectId)
+                .order('created_at', { ascending: false});
+            
+            // Проверить роль в проекте
+            const role = await ProjectMemberAPI.getRole(projectId, userId);
+            
+            // Если владелец или не участник - только свои
+            if (!role || role === 'owner') {
+                return mySubprojects || [];
+            }
+            
+            // Если участник - получить разрешенные подпроекты
+            const memberId = await ProjectMemberAPI.getMemberId(projectId, userId);
+            if (!memberId) return mySubprojects || [];
+            
+            const permissions = await MemberPermissionAPI.get(memberId);
+            const allowedSubprojectIds = permissions
+                .filter(p => p.resource_type === 'subproject' && p.can_view && p.resource_id !== null)
+                .map(p => p.resource_id);
+            
+            if (allowedSubprojectIds.length === 0) {
+                return mySubprojects || [];
+            }
+            
+            // Загрузить расшаренные подпроекты
+            const { data: sharedSubprojects } = await supabaseClient
+                .from('subprojects')
+                .select('*')
+                .in('id', allowedSubprojectIds)
+                .eq('project_id', projectId);
+            
+            const allSubprojects = [...(mySubprojects || [])];
+            (sharedSubprojects || []).forEach(sp => {
+                sp.isShared = true;
+                allSubprojects.push(sp);
+            });
+            
+            return allSubprojects;
+            
+        } catch (error) {
+            console.error('Ошибка загрузки подпроектов:', error);
+            return [];
+        }
     },
     
     async create(subproject) {
