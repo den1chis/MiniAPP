@@ -74,7 +74,8 @@ document.addEventListener('click', (e) => {
     const searchInput = document.getElementById('globalSearch');
     const searchResults = document.getElementById('searchResults');
     
-    if (e.target.tagName !== 'INPUT' && 
+    if (searchInput && searchResults &&
+        e.target.tagName !== 'INPUT' && 
         e.target.tagName !== 'TEXTAREA' && 
         !searchInput.contains(e.target) && 
         !searchResults.contains(e.target)) {
