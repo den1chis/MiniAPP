@@ -379,14 +379,19 @@ const MilestoneAPI = {
 // ========== API ПОЛЕЙ ==========
 const CustomFieldAPI = {
     async getAll(subprojectId) {
-        const { data, error } = await supabaseClient
-            .from('custom_fields')
-            .select('*')
-            .eq('subproject_id', subprojectId)
-            .order('created_at', { ascending: true });
-        
-        if (error) throw error;
-        return data || [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('custom_fields')
+                .select('*')
+                .eq('subproject_id', subprojectId)
+                .order('created_at', { ascending: true });
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Ошибка загрузки полей:', error);
+            return [];
+        }
     },
     
     async create(field) {
@@ -414,14 +419,19 @@ const CustomFieldAPI = {
 // ========== API ТАБЛИЦ ==========
 const SpTableAPI = {
     async getAll(subprojectId) {
-        const { data, error } = await supabaseClient
-            .from('sp_tables')
-            .select('*')
-            .eq('subproject_id', subprojectId)
-            .order('created_at', { ascending: true });
-        
-        if (error) throw error;
-        return data || [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('sp_tables')
+                .select('*')
+                .eq('subproject_id', subprojectId)
+                .order('created_at', { ascending: true });
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Ошибка загрузки таблиц:', error);
+            return [];
+        }
     },
 
     async create(table) {
@@ -446,14 +456,19 @@ const SpTableAPI = {
     },
 
     async getRows(tableId) {
-        const { data, error } = await supabaseClient
-            .from('sp_table_rows')
-            .select('*')
-            .eq('table_id', tableId)
-            .order('created_at', { ascending: true });
-        
-        if (error) throw error;
-        return data || [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('sp_table_rows')
+                .select('*')
+                .eq('table_id', tableId)
+                .order('created_at', { ascending: true });
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Ошибка загрузки строк таблицы:', error);
+            return [];
+        }
     },
 
     async createRow(tableId, rowData) {
@@ -497,14 +512,19 @@ const SpTableAPI = {
 // ========== API ЗАМЕТОК ПОДПРОЕКТА ==========
 const SubprojectNoteAPI = {
     async getAll(subprojectId) {
-        const { data, error } = await supabaseClient
-            .from('subproject_notes')
-            .select('*')
-            .eq('subproject_id', subprojectId)
-            .order('created_at', { ascending: false });
-        
-        if (error) throw error;
-        return data || [];
+        try {
+            const { data, error } = await supabaseClient
+                .from('subproject_notes')
+                .select('*')
+                .eq('subproject_id', subprojectId)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            console.error('Ошибка загрузки заметок подпроекта:', error);
+            return [];
+        }
     },
 
     async create(note) {

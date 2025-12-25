@@ -12,9 +12,19 @@ async function openSubprojectDetail(subprojectId) {
         if (!subproject) return;
         
         // Проверить права доступа
+        // Проверить права доступа
         const userId = getUserId();
-        const canEdit = await MemberPermissionAPI.canAccess(window.currentProjectId, userId, 'subproject', subprojectId, true);
-        
+        const role = await ProjectMemberAPI.getRole(window.currentProjectId, userId);
+        const isOwner = role === 'owner';
+
+        // Для не-владельцев проверить права редактирования
+        const canEdit = isOwner ? true : await MemberPermissionAPI.canAccess(
+            window.currentProjectId, 
+            userId, 
+            'subproject', 
+            subprojectId, 
+            true
+        );
         // Скрыть список подпроектов
         document.getElementById('workspace-subprojects').classList.add('hidden');
         
@@ -184,19 +194,34 @@ async function saveCustomField() {
     }
     
     try {
-        // Проверить права на редактирование
-        const { data: subproject } = await supabase
-            .from('subprojects')
-            .select('project_id')
-            .eq('id', window.currentSubprojectId)
-            .single();
-        
         const userId = getUserId();
-        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
         
-        if (!canEdit) {
-            showNotification('У вас нет прав на добавление полей', 'error');
+        // Получить подпроект
+        const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
+        const subproject = subprojects.find(sp => sp.id === window.currentSubprojectId);
+        
+        if (!subproject) {
+            showNotification('Подпроект не найден', 'error');
             return;
+        }
+        
+        // Проверить права
+        const role = await ProjectMemberAPI.getRole(subproject.project_id, userId);
+        const isOwner = role === 'owner';
+        
+        if (!isOwner) {
+            const canEdit = await MemberPermissionAPI.canAccess(
+                subproject.project_id, 
+                userId, 
+                'subproject', 
+                window.currentSubprojectId, 
+                true
+            );
+            
+            if (!canEdit) {
+                showNotification('У вас нет прав на добавление полей', 'error');
+                return;
+            }
         }
         
         await CustomFieldAPI.create({
@@ -209,6 +234,7 @@ async function saveCustomField() {
         showNotification('Поле добавлено', 'success');
         closeAddFieldModal();
         await loadCustomFields();
+        
     } catch (error) {
         console.error('Ошибка добавления поля:', error);
         showNotification('Ошибка добавления поля', 'error');
@@ -238,28 +264,44 @@ async function loadSubprojectTasks() {
         const userId = getUserId();
         
         // Получить project_id текущего подпроекта
-        const { data: subproject } = await supabase
-            .from('subprojects')
-            .select('project_id')
-            .eq('id', window.currentSubprojectId)
-            .single();
+        const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
+        const subproject = subprojects.find(sp => sp.id === window.currentSubprojectId);
         
-        if (!subproject) return;
-        
-        // Проверить доступ
-        const canView = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId);
-        
-        if (!canView) {
-            document.getElementById('spTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Нет доступа к задачам</p>';
+        if (!subproject) {
+            document.getElementById('spTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Подпроект не найден</p>';
             return;
         }
         
+        // Проверить роль в проекте
+        const role = await ProjectMemberAPI.getRole(subproject.project_id, userId);
+        
+        // Владелец имеет полный доступ
+        const isOwner = role === 'owner';
+        
+        // Если не владелец - проверить права на подпроект
+        if (!isOwner) {
+            const canView = await MemberPermissionAPI.canAccess(
+                subproject.project_id, 
+                userId, 
+                'subproject', 
+                window.currentSubprojectId
+            );
+            
+            if (!canView) {
+                document.getElementById('spTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Нет доступа к задачам</p>';
+                return;
+            }
+        }
+        
+        // Загрузить задачи
         const tasks = await TaskAPI.getAll();
         const subprojectTasks = tasks.filter(t => t.subproject_id === window.currentSubprojectId);
         
         renderSubprojectTasks(subprojectTasks);
+        
     } catch (error) {
         console.error('Ошибка загрузки задач подпроекта:', error);
+        document.getElementById('spTaskList').innerHTML = '<p class="text-center text-gray-400 py-8">Ошибка загрузки задач</p>';
     }
 }
 
@@ -315,19 +357,34 @@ async function addSubprojectTask() {
     }
     
     try {
-        // Проверить права на редактирование
-        const { data: subproject } = await supabase
-            .from('subprojects')
-            .select('project_id')
-            .eq('id', window.currentSubprojectId)
-            .single();
-        
         const userId = getUserId();
-        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
         
-        if (!canEdit) {
-            showNotification('У вас нет прав на добавление задач', 'error');
+        // Получить подпроект
+        const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
+        const subproject = subprojects.find(sp => sp.id === window.currentSubprojectId);
+        
+        if (!subproject) {
+            showNotification('Подпроект не найден', 'error');
             return;
+        }
+        
+        // Проверить права
+        const role = await ProjectMemberAPI.getRole(subproject.project_id, userId);
+        const isOwner = role === 'owner';
+        
+        if (!isOwner) {
+            const canEdit = await MemberPermissionAPI.canAccess(
+                subproject.project_id, 
+                userId, 
+                'subproject', 
+                window.currentSubprojectId, 
+                true
+            );
+            
+            if (!canEdit) {
+                showNotification('У вас нет прав на добавление задач', 'error');
+                return;
+            }
         }
         
         await TaskAPI.create({
@@ -346,6 +403,7 @@ async function addSubprojectTask() {
         showNotification('Задача добавлена', 'success');
         await loadSubprojectTasks();
         toggleSpTaskForm();
+        
     } catch (error) {
         console.error('Ошибка добавления задачи:', error);
         showNotification('Ошибка добавления задачи', 'error');
@@ -419,19 +477,34 @@ async function addSubprojectNote() {
     }
     
     try {
-        // Проверить права на редактирование
-        const { data: subproject } = await supabase
-            .from('subprojects')
-            .select('project_id')
-            .eq('id', window.currentSubprojectId)
-            .single();
-        
         const userId = getUserId();
-        const canEdit = await MemberPermissionAPI.canAccess(subproject.project_id, userId, 'subproject', window.currentSubprojectId, true);
         
-        if (!canEdit) {
-            showNotification('У вас нет прав на добавление заметок', 'error');
+        // Получить подпроект
+        const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
+        const subproject = subprojects.find(sp => sp.id === window.currentSubprojectId);
+        
+        if (!subproject) {
+            showNotification('Подпроект не найден', 'error');
             return;
+        }
+        
+        // Проверить права
+        const role = await ProjectMemberAPI.getRole(subproject.project_id, userId);
+        const isOwner = role === 'owner';
+        
+        if (!isOwner) {
+            const canEdit = await MemberPermissionAPI.canAccess(
+                subproject.project_id, 
+                userId, 
+                'subproject', 
+                window.currentSubprojectId, 
+                true // needEdit = true
+            );
+            
+            if (!canEdit) {
+                showNotification('У вас нет прав на добавление заметок', 'error');
+                return;
+            }
         }
         
         await SubprojectNoteAPI.create({
@@ -443,12 +516,12 @@ async function addSubprojectNote() {
         showNotification('Заметка добавлена', 'success');
         await loadSubprojectNotes();
         toggleSpNoteForm();
+        
     } catch (error) {
         console.error('Ошибка добавления заметки:', error);
         showNotification('Ошибка добавления заметки', 'error');
     }
 }
-
 // Удалить заметку подпроекта
 async function deleteSubprojectNote(id) {
     if (!confirm('Удалить заметку?')) return;
