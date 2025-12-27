@@ -1,20 +1,43 @@
-// Загрузка задач с группировкой
+// Флаг инициализации realtime
+let tasksRealtimeInitialized = false;
+
 async function loadTasks() {
     try {
-        const tasks = await TaskAPI.getAll();
-        const projects = await ProjectAPI.getAll();
+        // Инициализировать realtime один раз
+        if (!tasksRealtimeInitialized) {
+            RealtimeSync.subscribe('tasks', (payload) => {
+                const { eventType, new: newRecord, old: oldRecord } = payload;
+                
+                if (eventType === 'INSERT') {
+                    // Новая задача добавлена
+                    showRealtimeNotification('📥 Новая задача добавлена');
+                    loadTasks(); // Перезагрузить
+                } else if (eventType === 'UPDATE') {
+                    // Задача обновлена
+                    showRealtimeNotification('✏️ Задача обновлена');
+                    loadTasks();
+                } else if (eventType === 'DELETE') {
+                    // Задача удалена
+                    showRealtimeNotification('🗑️ Задача удалена');
+                    loadTasks();
+                }
+            });
+            tasksRealtimeInitialized = true;
+        }
         
+        const tasks = await TaskAPI.getAll();
+        
+        // Применить фильтры
         const filterProject = document.getElementById('filterProject')?.value || '';
         const filterPriority = document.getElementById('filterPriority')?.value || '';
-        const filterCompleted = document.getElementById('filterCompleted')?.value || '';
+        const filterStatus = document.getElementById('filterStatus')?.value || '';
+        const searchQuery = document.getElementById('taskSearch')?.value.toLowerCase() || '';
         
         let filtered = tasks;
         
-        if (filterCompleted === 'false') {
-            filtered = filtered.filter(t => !t.completed);
-        } else if (filterCompleted === 'true') {
-            filtered = filtered.filter(t => t.completed);
-        }
+        // Исключить удаляемые задачи
+        const deleting = OptimisticCache.get('tasks_deleting').map(d => d.original_id);
+        filtered = filtered.filter(t => !deleting.includes(t.id));
         
         if (filterProject) {
             filtered = filtered.filter(t => t.project_id == filterProject);
@@ -22,21 +45,41 @@ async function loadTasks() {
         if (filterPriority) {
             filtered = filtered.filter(t => t.priority === filterPriority);
         }
+        if (filterStatus) {
+            if (filterStatus === 'completed') {
+                filtered = filtered.filter(t => t.completed);
+            } else if (filterStatus === 'active') {
+                filtered = filtered.filter(t => !t.completed);
+            }
+        }
+        if (searchQuery) {
+            filtered = filtered.filter(t => 
+                t.title.toLowerCase().includes(searchQuery) ||
+                (t.description && t.description.toLowerCase().includes(searchQuery))
+            );
+        }
         
-        renderTasksGrouped(filtered, projects);
-        updateTaskCounts(tasks);
+        renderTasks(filtered);
+        
     } catch (error) {
         console.error('Ошибка загрузки задач:', error);
-        document.getElementById('taskList').innerHTML = `
-            <div class="text-center py-8">
-                <p class="text-red-600 mb-2">Ошибка загрузки задач</p>
-                <p class="text-sm text-gray-500">${error.message || 'Неизвестная ошибка'}</p>
-                <button onclick="loadTasks()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                    Повторить попытку
-                </button>
-            </div>
-        `;
+        showNotification('Ошибка загрузки задач', 'error');
     }
+}
+
+// Уведомление о realtime изменениях
+function showRealtimeNotification(message) {
+    // Простое toast уведомление
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
 }
 
 // Отрисовка задач с группировкой по проектам
@@ -490,3 +533,72 @@ function setEditDeadlineTomorrow() {
 function clearEditDeadline() {
     document.getElementById('editTaskDeadline').value = '';
 }
+
+// ========== РАЗРЕШЕНИЕ КОНФЛИКТОВ ==========
+let currentConflict = null;
+
+window.handleTaskConflict = async function(taskId, latest, attempted) {
+    currentConflict = { taskId, latest, attempted };
+    
+    // Заполнить данные
+    document.getElementById('conflictYourVersion').innerHTML = `
+        <p><strong>Название:</strong> ${attempted.title || latest.title}</p>
+        ${attempted.description ? `<p><strong>Описание:</strong> ${attempted.description}</p>` : ''}
+        ${attempted.priority ? `<p><strong>Приоритет:</strong> ${attempted.priority}</p>` : ''}
+    `;
+    
+    document.getElementById('conflictTheirVersion').innerHTML = `
+        <p><strong>Название:</strong> ${latest.title}</p>
+        ${latest.description ? `<p><strong>Описание:</strong> ${latest.description}</p>` : ''}
+        <p><strong>Приоритет:</strong> ${latest.priority}</p>
+        <p class="text-xs text-gray-500 mt-2">Изменено: ${new Date(latest.updated_at).toLocaleString('ru-RU')}</p>
+    `;
+    
+    // Показать модальное окно
+    document.getElementById('conflictModal').classList.remove('hidden');
+};
+
+window.resolveConflict = async function(resolution) {
+    if (!currentConflict) return;
+    
+    const { taskId, latest, attempted } = currentConflict;
+    
+    if (resolution === 'cancel') {
+        // Ничего не делать
+        document.getElementById('conflictModal').classList.add('hidden');
+        currentConflict = null;
+        await loadTasks(); // Обновить UI
+        return;
+    }
+    
+    if (resolution === 'theirs') {
+        // Принять их версию
+        document.getElementById('conflictModal').classList.add('hidden');
+        currentConflict = null;
+        await loadTasks(); // Просто обновить UI
+        showNotification('Принята версия другого пользователя', 'info');
+        return;
+    }
+    
+    if (resolution === 'mine') {
+        // Принудительно сохранить свою версию
+        try {
+            const { data, error } = await supabaseClient
+                .from('tasks')
+                .update({ ...attempted, version: latest.version + 1 })
+                .eq('id', taskId)
+                .select()
+                .single();
+            
+            if (error) throw error;
+            
+            document.getElementById('conflictModal').classList.add('hidden');
+            currentConflict = null;
+            await loadTasks();
+            showNotification('Ваши изменения сохранены', 'success');
+        } catch (error) {
+            console.error('Ошибка принудительного сохранения:', error);
+            showNotification('Ошибка сохранения', 'error');
+        }
+    }
+};

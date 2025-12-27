@@ -1565,6 +1565,36 @@
             </div>
         </div>
     </div>
+    <!-- Модальное окно конфликта -->
+    <div id="conflictModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+            <h2 class="text-xl font-bold text-red-600 mb-4">⚠️ Конфликт изменений</h2>
+            <p class="text-gray-700 mb-4">Эта задача была изменена другим пользователем пока Вы её редактировали.</p>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-2">Ваша версия:</h3>
+                    <div id="conflictYourVersion" class="bg-blue-50 border border-blue-200 rounded p-3 text-sm"></div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-gray-800 mb-2">Их версия:</h3>
+                    <div id="conflictTheirVersion" class="bg-red-50 border border-red-200 rounded p-3 text-sm"></div>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 justify-end">
+                <button onclick="resolveConflict('cancel')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                    Отмена
+                </button>
+                <button onclick="resolveConflict('theirs')" class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600">
+                    Взять их версию
+                </button>
+                <button onclick="resolveConflict('mine')" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                    Сохранить моё (перезаписать)
+                </button>
+            </div>
+        </div>
+    </div>
     <!-- Supabase CDN ПЕРВЫМ -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
