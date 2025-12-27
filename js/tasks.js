@@ -66,7 +66,69 @@ async function loadTasks() {
         showNotification('Ошибка загрузки задач', 'error');
     }
 }
-
+function renderTasks(tasks) {
+    const container = document.getElementById('taskList');
+    
+    if (!container) {
+        console.error('Элемент taskList не найден');
+        return;
+    }
+    
+    if (!tasks || tasks.length === 0) {
+        container.innerHTML = '<p class="text-center text-gray-400 py-8">Нет задач</p>';
+        return;
+    }
+    
+    container.innerHTML = tasks.map(task => {
+        const isOptimistic = task._optimistic;
+        const priorityColors = {
+            high: 'text-red-500',
+            medium: 'text-yellow-500',
+            low: 'text-green-500'
+        };
+        const priorityEmojis = {
+            high: '🔴',
+            medium: '🟡',
+            low: '🟢'
+        };
+        
+        return `
+            <div class="bg-white border rounded-lg p-4 hover:shadow-md transition-shadow ${isOptimistic ? 'opacity-60' : ''}">
+                <div class="flex items-start justify-between">
+                    <div class="flex items-start gap-3 flex-1">
+                        <input 
+                            type="checkbox" 
+                            ${task.completed ? 'checked' : ''} 
+                            ${isOptimistic ? 'disabled' : ''}
+                            onchange="toggleTask(${task.id})"
+                            class="mt-1 w-5 h-5 rounded border-gray-300 cursor-pointer"
+                        >
+                        <div class="flex-1">
+                            <h3 class="font-medium ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}">
+                                ${escapeHtml(task.title)}
+                                ${isOptimistic ? '<span class="text-xs text-blue-500 ml-2">⏳ Сохранение...</span>' : ''}
+                            </h3>
+                            ${task.description ? `<p class="text-sm text-gray-600 mt-1">${escapeHtml(task.description)}</p>` : ''}
+                            
+                            <div class="flex gap-2 mt-2 flex-wrap">
+                                ${priorityEmojis[task.priority] ? `<span class="text-sm ${priorityColors[task.priority]}">${priorityEmojis[task.priority]}</span>` : ''}
+                                ${task.project_name ? `<span class="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">📁 ${escapeHtml(task.project_name)}</span>` : ''}
+                                ${task.deadline ? `<span class="text-xs px-2 py-1 ${task.is_overdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'} rounded">${formatDeadline(task.deadline, task.is_overdue)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-2 ml-2">
+                        ${!isOptimistic ? `
+                            <button onclick="openEditTaskModal(${task.id})" class="text-blue-600 hover:text-blue-800">✏️</button>
+                            <button onclick="deleteTask(${task.id})" class="text-red-600 hover:text-red-800">🗑️</button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
 // Уведомление о realtime изменениях
 function showRealtimeNotification(message) {
     // Простое toast уведомление
@@ -358,22 +420,26 @@ function clearTaskDeadline() {
 }
 
 // Переключить статус задачи
+// Отметить задачу выполненной
 async function toggleTask(id) {
     try {
         const tasks = await TaskAPI.getAll();
         const task = tasks.find(t => t.id === id);
         
-        if (task) {
-            const newCompleted = !task.completed;
-            await TaskAPI.update(id, { 
-                completed: newCompleted,
-                completed_at: newCompleted ? new Date().toISOString() : null
-            });
-            await loadTasks();
-        }
+        if (!task) return;
+        
+        await TaskAPI.update(id, { 
+            completed: !task.completed,
+            completed_at: !task.completed ? new Date().toISOString() : null
+        });
+        
+        hapticFeedback('light');
+        await loadTasks();
     } catch (error) {
-        console.error('Ошибка обновления задачи:', error);
-        showNotification('Ошибка обновления задачи', 'error');
+        console.error('Ошибка переключения задачи:', error);
+        if (error.type !== 'CONFLICT') {
+            showNotification('Ошибка обновления задачи', 'error');
+        }
     }
 }
 
@@ -383,11 +449,10 @@ async function deleteTask(id) {
     
     try {
         await TaskAPI.delete(id);
+        hapticFeedback('success');
         showNotification('Задача удалена', 'success');
-        await loadTasks();
     } catch (error) {
-        console.error('Ошибка удаления задачи:', error);
-        showNotification('Ошибка удаления задачи', 'error');
+        console.error('Ошибка удаления:', error);
     }
 }
 
