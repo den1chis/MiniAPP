@@ -148,6 +148,7 @@ async function loadTasks() {
 
 // Отрисовка задач с группировкой по проектам
 // Отрисовка задач с группировкой по проектам и подпроектам
+// Отрисовка задач с группировкой по проектам и подпроектам
 async function renderTasksGrouped(tasks, projects) {
     const container = document.getElementById('taskList');
     
@@ -156,7 +157,7 @@ async function renderTasksGrouped(tasks, projects) {
         return;
     }
     
-    // Загрузить подпроекты
+    // Загрузить ВСЕ подпроекты для всех проектов
     let allSubprojects = [];
     try {
         for (const project of projects) {
@@ -234,6 +235,125 @@ async function renderTasksGrouped(tasks, projects) {
     });
     
     container.innerHTML = html || '<p class="text-center text-gray-400 py-8">Нет задач</p>';
+}
+
+// Отрисовка заголовка проекта
+function renderProjectHeader(project, totalTasks) {
+    const isCollapsed = localStorage.getItem(`project_${project.id}_collapsed`) === 'true';
+    
+    return `
+        <div class="border rounded-lg overflow-hidden mb-4">
+            <!-- Заголовок проекта -->
+            <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-3 flex items-center justify-between cursor-pointer hover:from-blue-600 hover:to-blue-700 transition-colors" onclick="toggleProject(${project.id})">
+                <div class="flex items-center gap-2">
+                    <span id="projectIcon-${project.id}" class="text-white">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="text-2xl">${project.icon}</span>
+                    <h3 class="font-bold text-white">${project.name}</h3>
+                    <span class="text-sm text-blue-100">(${totalTasks})</span>
+                </div>
+                <button onclick="event.stopPropagation(); openWorkspace(${project.id})" class="text-white hover:text-blue-100 text-sm">
+                    Открыть →
+                </button>
+            </div>
+            
+            <!-- Содержимое проекта -->
+            <div id="project-${project.id}" class="${isCollapsed ? 'hidden' : ''} bg-gray-50">
+    `;
+}
+
+// Отрисовка группы задач
+function renderTaskGroup(groupId, groupName, groupIcon, tasks, project, indentLevel = 0) {
+    const isCollapsed = localStorage.getItem(`taskGroup_${groupId}_collapsed`) === 'true';
+    const indent = indentLevel * 20; // 20px на уровень вложенности
+    
+    let html = `
+        <div class="border-b last:border-b-0">
+            <!-- Заголовок группы -->
+            <div class="px-4 py-2 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition-colors" 
+                 onclick="toggleTaskGroup('${groupId}')"
+                 style="padding-left: ${indent + 16}px">
+                <div class="flex items-center gap-2">
+                    <span id="taskGroupIcon-${groupId}" class="text-sm text-gray-600">${isCollapsed ? '▶' : '▼'}</span>
+                    <span class="text-base">${groupIcon}</span>
+                    <h4 class="font-medium text-gray-700 text-sm">${groupName}</h4>
+                    <span class="text-xs text-gray-500">(${tasks.length})</span>
+                </div>
+            </div>
+            
+            <!-- Список задач группы -->
+            <div id="taskGroup-${groupId}" class="${isCollapsed ? 'hidden' : ''} bg-white">
+    `;
+    
+    tasks.forEach(task => {
+        html += `
+            <div class="flex items-start gap-3 p-3 border-t hover:bg-gray-50 transition-colors" style="padding-left: ${indent + 40}px">
+                <input 
+                    type="checkbox" 
+                    ${task.completed ? 'checked' : ''} 
+                    onchange="toggleTask(${task.id})"
+                    class="mt-1 w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                <div class="flex-1 min-w-0">
+                    <h5 class="font-medium text-sm ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'} break-words">
+                        ${task.title}
+                    </h5>
+                    ${task.description ? `<p class="text-xs text-gray-600 mt-1 break-words">${task.description}</p>` : ''}
+                    
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        ${task.priority === 'high' ? '<span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">🔴</span>' : ''}
+                        ${task.priority === 'medium' ? '<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">🟡</span>' : ''}
+                        ${task.priority === 'low' ? '<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">🟢</span>' : ''}
+                        
+                        ${task.deadline ? `<span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">📅 ${new Date(task.deadline).toLocaleDateString('ru-RU')}</span>` : ''}
+                    </div>
+                </div>
+                
+                <div class="flex gap-1 flex-shrink-0">
+                    <button onclick="openEditTaskModal(${task.id})" class="text-blue-600 hover:text-blue-800 p-1">✏️</button>
+                    <button onclick="deleteTask(${task.id})" class="text-red-600 hover:text-red-800 p-1">🗑️</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    return html;
+}
+
+// Свернуть/развернуть проект
+function toggleProject(projectId) {
+    const project = document.getElementById(`project-${projectId}`);
+    const icon = document.getElementById(`projectIcon-${projectId}`);
+    
+    if (project.classList.contains('hidden')) {
+        project.classList.remove('hidden');
+        icon.textContent = '▼';
+        localStorage.setItem(`project_${projectId}_collapsed`, 'false');
+    } else {
+        project.classList.add('hidden');
+        icon.textContent = '▶';
+        localStorage.setItem(`project_${projectId}_collapsed`, 'true');
+    }
+}
+
+// Свернуть/развернуть группу задач
+function toggleTaskGroup(groupId) {
+    const group = document.getElementById(`taskGroup-${groupId}`);
+    const icon = document.getElementById(`taskGroupIcon-${groupId}`);
+    
+    if (group.classList.contains('hidden')) {
+        group.classList.remove('hidden');
+        icon.textContent = '▼';
+        localStorage.setItem(`taskGroup_${groupId}_collapsed`, 'false');
+    } else {
+        group.classList.add('hidden');
+        icon.textContent = '▶';
+        localStorage.setItem(`taskGroup_${groupId}_collapsed`, 'true');
+    }
 }
 
 // Отрисовка заголовка проекта
