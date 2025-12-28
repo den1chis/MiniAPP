@@ -104,12 +104,12 @@ async function loadTasks() {
         }
         
         const tasks = await TaskAPI.getAll();
-        const projects = await ProjectAPI.getAll(); // ← ДОБАВИТЬ ЭТУ СТРОКУ
+        const projects = await ProjectAPI.getAll();
         
         // Применить фильтры
         const filterProject = document.getElementById('filterProject')?.value || '';
         const filterPriority = document.getElementById('filterPriority')?.value || '';
-        const filterStatus = document.getElementById('filterStatus')?.value || '';
+        const filterCompleted = document.getElementById('filterCompleted')?.value || '';
         const searchQuery = document.getElementById('taskSearch')?.value.toLowerCase() || '';
         
         let filtered = tasks;
@@ -118,18 +118,19 @@ async function loadTasks() {
         const deleting = OptimisticCache.get('tasks_deleting').map(d => d.original_id);
         filtered = filtered.filter(t => !deleting.includes(t.id));
         
+        // Фильтр по завершённости (ПЕРВЫМ)
+        if (filterCompleted === 'true') {
+            filtered = filtered.filter(t => t.completed);
+        } else if (filterCompleted === 'false') {
+            filtered = filtered.filter(t => !t.completed);
+        }
+        // Если filterCompleted === '' — не фильтруем, показываем все
+        
         if (filterProject) {
             filtered = filtered.filter(t => t.project_id == filterProject);
         }
         if (filterPriority) {
             filtered = filtered.filter(t => t.priority === filterPriority);
-        }
-        if (filterStatus) {
-            if (filterStatus === 'completed') {
-                filtered = filtered.filter(t => t.completed);
-            } else if (filterStatus === 'active') {
-                filtered = filtered.filter(t => !t.completed);
-            }
         }
         if (searchQuery) {
             filtered = filtered.filter(t => 
@@ -138,8 +139,8 @@ async function loadTasks() {
             );
         }
         
-        renderTasksGrouped(filtered, projects); // ← projects передан
-        updateTaskCounts(tasks); // ← ДОБАВИТЬ ЭТУ СТРОКУ
+        renderTasksGrouped(filtered, projects);
+        updateTaskCounts(tasks);
         
     } catch (error) {
         console.error('Ошибка загрузки задач:', error);
