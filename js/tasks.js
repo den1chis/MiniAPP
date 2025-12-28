@@ -1,5 +1,8 @@
 // Флаг инициализации realtime
+// Флаг инициализации realtime
 let tasksRealtimeInitialized = false;
+
+// ========== ОТРИСОВКА ЗАДАЧ ==========
 function renderTasks(tasks) {
     const container = document.getElementById('taskList');
     
@@ -63,6 +66,22 @@ function renderTasks(tasks) {
         `;
     }).join('');
 }
+
+// Уведомление о realtime изменениях
+function showRealtimeNotification(message) {
+    const toast = document.createElement('div');
+    toast.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s';
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+}
+
+// ========== ЗАГРУЗКА ЗАДАЧ С REALTIME ==========
 async function loadTasks() {
     try {
         // Инициализировать realtime один раз
@@ -71,15 +90,12 @@ async function loadTasks() {
                 const { eventType, new: newRecord, old: oldRecord } = payload;
                 
                 if (eventType === 'INSERT') {
-                    // Новая задача добавлена
                     showRealtimeNotification('📥 Новая задача добавлена');
-                    loadTasks(); // Перезагрузить
+                    loadTasks();
                 } else if (eventType === 'UPDATE') {
-                    // Задача обновлена
                     showRealtimeNotification('✏️ Задача обновлена');
                     loadTasks();
                 } else if (eventType === 'DELETE') {
-                    // Задача удалена
                     showRealtimeNotification('🗑️ Задача удалена');
                     loadTasks();
                 }
@@ -129,20 +145,6 @@ async function loadTasks() {
     }
 }
 
-// Уведомление о realtime изменениях
-function showRealtimeNotification(message) {
-    // Простое toast уведомление
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-4 right-4 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, 2000);
-}
 
 // Отрисовка задач с группировкой по проектам
 // Отрисовка задач с группировкой по проектам и подпроектам
