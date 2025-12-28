@@ -104,6 +104,7 @@ async function loadTasks() {
         }
         
         const tasks = await TaskAPI.getAll();
+        const projects = await ProjectAPI.getAll(); // ← ДОБАВИТЬ ЭТУ СТРОКУ
         
         // Применить фильтры
         const filterProject = document.getElementById('filterProject')?.value || '';
@@ -137,7 +138,8 @@ async function loadTasks() {
             );
         }
         
-        renderTasks(filtered);
+        renderTasksGrouped(filtered, projects); // ← projects передан
+        updateTaskCounts(tasks); // ← ДОБАВИТЬ ЭТУ СТРОКУ
         
     } catch (error) {
         console.error('Ошибка загрузки задач:', error);
