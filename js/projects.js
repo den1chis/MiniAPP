@@ -59,6 +59,7 @@ async function addProject() {
     }
     
     try {
+        // Создать проект (ОДИН РАЗ)
         await ProjectAPI.create({
             name,
             description,
@@ -66,16 +67,33 @@ async function addProject() {
             color
         });
         
+        // Очистить форму
         document.getElementById('newProjectName').value = '';
         document.getElementById('newProjectDescription').value = '';
         document.getElementById('newProjectIcon').value = '';
         document.getElementById('newProjectColor').value = '#3B82F6';
         
         showNotification('Проект создан', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'project_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Проект создан');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            // Обновить профиль если открыт
+            TreeAPI.refreshProfileDebounced();
+        }
+        
+        // Обновить список проектов
         await loadProjects();
         
         // Закрыть форму
         toggleProjectForm();
+        
     } catch (error) {
         console.error('Ошибка создания проекта:', error);
         showNotification('Ошибка создания проекта', 'error');

@@ -190,12 +190,24 @@ async function createTable() {
     }));
     
     try {
-        // Создать таблицу
+        // Создать таблицу (ОДИН РАЗ)
         const table = await SpTableAPI.create({
             subproject_id: window.currentSubprojectId,
             name,
             columns
         });
+        
+        // ✅ НАЧИСЛИТЬ XP ЗА ТАБЛИЦУ
+        const result = await TreeAPI.addXP(getUserId(), 'table_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Таблица создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
         
         // Создать пустые строки
         for (let i = 0; i < rowsCount; i++) {
@@ -204,11 +216,15 @@ async function createTable() {
                 emptyRow[col.name] = col.type === 'checkbox' ? false : '';
             });
             await SpTableAPI.createRow(table.id, emptyRow);
+            
+            // ✅ НАЧИСЛИТЬ XP ЗА КАЖДУЮ СТРОКУ (БЕЗ УВЕДОМЛЕНИЯ)
+            await TreeAPI.addXP(getUserId(), 'table_row_created');
         }
         
         showNotification('Таблица создана', 'success');
         closeCreateTableModal();
         await loadSubprojectTables();
+        
     } catch (error) {
         console.error('Ошибка создания таблицы:', error);
         showNotification('Ошибка создания таблицы', 'error');
@@ -247,8 +263,13 @@ async function addTableRow(tableId) {
         });
         
         await SpTableAPI.createRow(tableId, emptyRow);
+        
+        // ✅ НАЧИСЛИТЬ XP (БЕЗ УВЕДОМЛЕНИЯ - МЕЛКОЕ ДЕЙСТВИЕ)
+        await TreeAPI.addXP(getUserId(), 'table_row_created');
+        
         showNotification('Строка добавлена', 'success');
         await loadTableData(tableId, table.columns);
+        
     } catch (error) {
         console.error('Ошибка добавления строки:', error);
         showNotification('Ошибка добавления строки', 'error');

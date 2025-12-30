@@ -279,13 +279,26 @@ function renderSubprojects(subprojects) {
         </div>
     `).join('');
 }
-
+function closeSubprojectModal() {
+    const modal = document.getElementById('subprojectModal');
+    if (modal) {
+        modal.classList.add('hidden');
+    }
+    
+    // Очистить форму
+    const nameInput = document.getElementById('newSubprojectName');
+    const descInput = document.getElementById('newSubprojectDescription');
+    const iconInput = document.getElementById('newSubprojectIcon');
+    
+    if (nameInput) nameInput.value = '';
+    if (descInput) descInput.value = '';
+    if (iconInput) iconInput.value = '';
+}
 // Добавить подпроект
 async function addSubproject() {
     const name = document.getElementById('newSubprojectName').value.trim();
     const description = document.getElementById('newSubprojectDescription').value.trim();
-    const icon = document.getElementById('newSubprojectIcon').value.trim() || '📁';
-    const color = document.getElementById('newSubprojectColor').value;
+    const icon = document.getElementById('newSubprojectIcon').value.trim() || '📂';
     
     if (!name) {
         showNotification('Введите название подпроекта', 'error');
@@ -293,26 +306,37 @@ async function addSubproject() {
     }
     
     try {
+        console.log('📝 Создаём подпроект:', name, 'в проекте:', window.currentProjectId);
+        
         await SubprojectAPI.create({
             project_id: window.currentProjectId,
             name,
             description,
-            icon,
-            color
+            icon
         });
         
-        document.getElementById('newSubprojectName').value = '';
-        document.getElementById('newSubprojectDescription').value = '';
-        document.getElementById('newSubprojectIcon').value = '';
-        document.getElementById('newSubprojectColor').value = '#3B82F6';
+        console.log('✅ Подпроект создан');
         
         showNotification('Подпроект создан', 'success');
-        await loadSubprojects();
         
-        toggleSubprojectForm();
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'subproject_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Подпроект создан');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
+        await loadSubprojects();
+        closeSubprojectModal(); // ← Теперь функция существует
+        
     } catch (error) {
-        console.error('Ошибка создания подпроекта:', error);
-        showNotification('Ошибка создания подпроекта', 'error');
+        console.error('❌ Ошибка создания подпроекта:', error);
+        showNotification('Ошибка создания подпроекта: ' + error.message, 'error');
     }
 }
 
@@ -567,20 +591,28 @@ async function addMilestone() {
     const name = document.getElementById('newMilestoneName').value.trim();
     const description = document.getElementById('newMilestoneDescription').value.trim();
     const startDate = document.getElementById('milestoneStartDate').value || null;
-    const endDate = document.getElementById('milestoneEndDate').value || null;
+    let endDate = document.getElementById('milestoneEndDate').value || null;
     
     if (!name) {
         showNotification('Введите название этапа', 'error');
         return;
     }
     
+    if (endDate) {
+        const date = new Date(endDate);
+        date.setHours(23, 59, 59, 999);
+        endDate = date.toISOString();
+    }
+    
     try {
         await MilestoneAPI.create({
+            user_id: getUserId(),
             project_id: window.currentProjectId,
-            name,
-            description,
+            name: name,
+            description: description,
             start_date: startDate,
-            end_date: endDate
+            end_date: endDate,
+            completed: false
         });
         
         document.getElementById('newMilestoneName').value = '';
@@ -588,14 +620,25 @@ async function addMilestone() {
         document.getElementById('milestoneStartDate').value = '';
         document.getElementById('milestoneEndDate').value = '';
         
-        showNotification('Этап создан', 'success');
-        await loadMilestones();
-        await updateMilestoneSelect();
+        showNotification('Этап добавлен', 'success');
         
+        const result = await TreeAPI.addXP(getUserId(), 'milestone_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Этап создан');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
+        await loadMilestones();
         toggleMilestoneForm();
+        
     } catch (error) {
-        console.error('Ошибка создания этапа:', error);
-        showNotification('Ошибка создания этапа', 'error');
+        console.error('❌ Ошибка добавления этапа:', error);
+        showNotification('Ошибка добавления этапа: ' + error.message, 'error');
     }
 }
 
@@ -605,13 +648,34 @@ async function toggleMilestone(id) {
         const milestones = await MilestoneAPI.getAll(window.currentProjectId);
         const milestone = milestones.find(m => m.id === id);
         
-        if (milestone) {
-            await MilestoneAPI.update(id, { completed: !milestone.completed });
-            await loadMilestones();
+        if (!milestone) {
+            console.error('❌ Этап не найден');
+            return;
         }
+        
+        const newCompleted = !milestone.completed;
+        
+        await MilestoneAPI.update(id, { completed: newCompleted });
+        
+        // ✅ НАЧИСЛИТЬ XP ЕСЛИ ЗАВЕРШЁН
+        if (newCompleted) {
+            const result = await TreeAPI.addXP(getUserId(), 'milestone_completed');
+            if (result) {
+                showXPNotification(result.totalXP, 'Этап выполнен!');
+                
+                if (result.leveledUp) {
+                    showLevelUpNotification(result.newLevel);
+                }
+                
+                TreeAPI.refreshProfileDebounced();
+            }
+        }
+        
+        await loadMilestones();
+        
     } catch (error) {
-        console.error('Ошибка обновления этапа:', error);
-        showNotification('Ошибка обновления этапа', 'error');
+        console.error('❌ Ошибка переключения этапа:', error);
+        showNotification('Ошибка переключения этапа: ' + error.message, 'error');
     }
 }
 
@@ -693,22 +757,35 @@ async function addProjectNote() {
     }
     
     try {
+        // ✅ ПРАВИЛЬНЫЙ ВЫЗОВ: (projectId, title, content)
         await ProjectNoteAPI.create(window.currentProjectId, title, content);
         
         document.getElementById('newProjectNoteTitle').value = '';
         document.getElementById('newProjectNoteContent').value = '';
         
         showNotification('Заметка создана', 'success');
+        
+        const result = await TreeAPI.addXP(getUserId(), 'project_note_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Заметка проекта создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
         await loadProjectNotes();
         await loadWorkspaceStats();
         
         toggleProjectNoteForm();
+        
     } catch (error) {
         console.error('Ошибка создания заметки:', error);
-        showNotification('Ошибка создания заметки', 'error');
+        showNotification('Ошибка создания заметки: ' + error.message, 'error');
     }
 }
-
 // Удалить заметку проекта
 async function deleteProjectNote(id) {
     if (!confirm('Удалить заметку?')) return;
@@ -952,18 +1029,29 @@ async function addProjectMember() {
         
         // Установить базовые права в зависимости от роли
         if (role === 'viewer') {
-            // Зритель видит всё, но не редактирует
             await MemberPermissionAPI.set(memberId, 'tasks', true, false);
             await MemberPermissionAPI.set(memberId, 'notes', true, false);
             await MemberPermissionAPI.set(memberId, 'roadmap', true, false);
         } else if (role === 'editor') {
-            // Редактор видит и редактирует всё
             await MemberPermissionAPI.set(memberId, 'tasks', true, true);
             await MemberPermissionAPI.set(memberId, 'notes', true, true);
             await MemberPermissionAPI.set(memberId, 'roadmap', true, true);
         }
         
         showNotification('Участник добавлен', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'member_invited');
+        if (result) {
+            showXPNotification(result.totalXP, 'Участник приглашён');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
         document.getElementById('newMemberTelegramId').value = '';
         await loadProjectMembers();
         
@@ -1192,10 +1280,11 @@ async function openWorkspace(projectId) {
             showNotification('У вас нет доступа к этому проекту', 'error');
             return;
         }
-        
-        // Скрыть основные табы, показать workspace табы
-        document.getElementById('mainTabs').classList.add('hidden');
-        document.getElementById('workspaceTabs').classList.remove('hidden');
+        const mainNav = document.getElementById('mainNavigation');
+        if (mainNav) {
+            mainNav.classList.add('hidden');
+        }
+
         
         // Показать workspace view
         const allViews = document.querySelectorAll('.tab-content');
@@ -1203,8 +1292,15 @@ async function openWorkspace(projectId) {
         document.getElementById('view-workspace').classList.remove('hidden');
         
         // Показать кнопку "Назад"
-        document.getElementById('backBtn').classList.remove('hidden');
-        document.getElementById('pageTitle').textContent = `${project.icon} ${project.name}`;
+        const backBtn = document.getElementById('backBtn');
+        if (backBtn) {
+            backBtn.classList.remove('hidden');
+        }
+        
+        const pageTitle = document.getElementById('pageTitle');
+        if (pageTitle) {
+            pageTitle.textContent = `${project.icon} ${project.name}`;
+        }
         
         // Установить данные проекта
         document.getElementById('ws-project-name').textContent = project.name;
@@ -1220,4 +1316,19 @@ async function openWorkspace(projectId) {
         console.error('Ошибка открытия workspace:', error);
         showNotification('Ошибка открытия проекта', 'error');
     }
+}
+
+
+function closeWorkspace() {
+    // ✅ ПОКАЗАТЬ ОСНОВНУЮ НАВИГАЦИЮ
+    const mainNav = document.getElementById('mainNavigation');
+    if (mainNav) {
+        mainNav.classList.remove('hidden');
+    }
+    
+    // Вернуться к проектам
+    switchTab('projects');
+    
+    // Очистить текущий проект
+    window.currentProjectId = null;
 }

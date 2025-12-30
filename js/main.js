@@ -84,15 +84,15 @@ document.addEventListener('click', (e) => {
 });
 
 // ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ==========
+// ========== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ==========
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('newTaskInput')?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') addTask();
     });
     
-    loadTasks();
-    loadProjects();
+    // Открыть профиль первым
+    switchTab('profile');
 });
-
 // ========== ГОРЯЧИЕ КЛАВИШИ ==========
 // Горячие клавиши через Alt
 document.addEventListener('keydown', (e) => {

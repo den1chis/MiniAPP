@@ -52,21 +52,39 @@ async function addNote() {
     }
     
     try {
+        // Создать заметку (ОДИН РАЗ)
         await NoteAPI.create({
             title,
             content,
             tags
         });
         
+        // Очистить форму
         document.getElementById('newNoteTitle').value = '';
         document.getElementById('newNoteContent').value = '';
         document.getElementById('newNoteTags').value = '';
         
         showNotification('Заметка создана', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'note_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Заметка создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            // Обновить профиль если открыт
+            TreeAPI.refreshProfileDebounced();
+        }
+        
+        // Обновить список заметок
         await loadNotes();
         
         // Закрыть форму
         toggleNoteForm();
+        
     } catch (error) {
         console.error('Ошибка создания заметки:', error);
         showNotification('Ошибка создания заметки', 'error');

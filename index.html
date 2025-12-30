@@ -83,63 +83,117 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
+
+        .achievement-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .achievement-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .achievement-unlocked {
+            background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+            border: 2px solid #F59E0B;
+        }
+
+        .achievement-locked {
+            background: #F3F4F6;
+            border: 2px solid #E5E7EB;
+            opacity: 0.7;
+        }
+
+        .achievement-icon-unlocked {
+            filter: none;
+        }
+
+        .achievement-icon-locked {
+            filter: grayscale(100%);
+            opacity: 0.5;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -1000px 0; }
+            100% { background-position: 1000px 0; }
+        }
+
+        .achievement-unlocked::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -150%;
+            width: 150%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 3s infinite;
+        }
+        .workspace-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
     <!-- Навигация -->
     <div class="bg-white shadow-sm sticky top-0 z-50">
         <div class="max-w-4xl mx-auto px-4 py-3">
-            <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center justify-between p-3 bg-white border-b">
+                <h1 class="text-lg font-bold text-gray-800">Планировщик</h1>
                 <div class="flex items-center gap-2">
-                    <button onclick="goBack()" id="backBtn" class="hidden text-gray-600 hover:text-gray-800">
-                        ← Назад
+                    <span class="text-xs text-gray-500">User ID: <span id="userId"></span></span>
+                    <button 
+                        onclick="switchTab('profile')" 
+                        class="p-1.5 rounded-full hover:bg-gray-100 active:bg-gray-200 transition-colors"
+                        title="Профиль"
+                    >
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
                     </button>
-                    <h1 class="text-xl font-bold text-gray-800" id="pageTitle">Планировщик</h1>
                 </div>
-                <p class="text-xs text-gray-500" id="userInfo">Загрузка...</p>
+            </div>
+            <!-- Основная навигация -->
+            <div id="mainNavigation" class="bg-white border-b shadow-sm p-3 flex items-center justify-between sticky top-0 z-40">
+                <!--<div id="mainNavigation" class="bg-white border-b shadow-sm p-3 flex items-center justify-between sticky top-0 z-40"></div>
+                --> <div class="flex gap-2">
+                        <button onclick="switchTab('tasks')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Задачи">📋</button>
+                        <button onclick="switchTab('projects')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Проекты">📁</button>
+                        <button onclick="switchTab('calendar')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Календарь">📅</button>
+                        <button onclick="switchTab('notes')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Заметки">📝</button>
+                        <button onclick="switchTab('dashboard')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Дашборд">📊</button>
+                        
+                        <!--<button onclick="switchTab('kanban')" class="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200 transition-colors" title="Канбан">📋</button>-->
+                        
+                    </div>
+                    <button onclick="switchTab('achievements')" class="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-full hover:from-yellow-500 hover:to-orange-600 transition-all">
+                        <span>🏆</span>
+                        <span class="text-sm font-bold" id="achievementsCount">0/50</span>
+                    </button>
+                </div>
             </div>
             
             <!-- Табы главного меню -->
-            <div class="flex gap-2 overflow-x-auto pb-1" id="mainTabs">
-                <button onclick="switchTab('tasks')" id="tab-tasks" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-blue-500 text-white">
-                    Задачи
-                </button>
-                <button onclick="switchTab('kanban')" id="tab-kanban" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Доска
-                </button>
-                <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Дашборд
-                </button>
-                <button onclick="switchTab('calendar')" id="tab-calendar" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Календарь
-                </button>
-                <button onclick="switchTab('projects')" id="tab-projects" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Проекты
-                </button>
-                <button onclick="switchTab('notes')" id="tab-notes" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Заметки
-                </button>
-                <button onclick="switchTab('settings')" id="tab-settings" class="tab-btn px-4 py-2 rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    Настройки
-                </button>
-            </div>
+            
             
             <!-- Табы workspace -->
             <div class="hidden gap-2 overflow-x-auto pb-1 mt-2" id="workspaceTabs">
                 <button onclick="switchWorkspaceTab('overview')" id="ws-tab-overview" class="ws-tab-btn px-3 py-1.5 text-sm rounded-lg font-medium whitespace-nowrap transition-colors bg-blue-500 text-white">
-                    📊 Обзор
+                    📊
                 </button>
                 <button onclick="switchWorkspaceTab('tasks')" id="ws-tab-tasks" class="ws-tab-btn px-3 py-1.5 text-sm rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    ✅ Задачи
+                    ✅
                 </button>
                 <button onclick="switchWorkspaceTab('subprojects')" id="ws-tab-subprojects" class="ws-tab-btn px-3 py-1.5 text-sm rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    📁 Подпроекты
+                    📁
                 </button>
                 <button onclick="switchWorkspaceTab('roadmap')" id="ws-tab-roadmap" class="ws-tab-btn px-3 py-1.5 text-sm rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    🗺️ Roadmap
+                    🗺️
                 </button>
                 <button onclick="switchWorkspaceTab('notes')" id="ws-tab-notes" class="ws-tab-btn px-3 py-1.5 text-sm rounded-lg font-medium whitespace-nowrap transition-colors bg-gray-100 text-gray-600">
-                    📝 Заметки
+                    📝
                 </button>
             </div>
         </div>
@@ -148,6 +202,112 @@
     <div class="max-w-4xl mx-auto p-4">
         
         <!-- ========== ВКЛАДКА: ЗАДАЧИ ========== -->
+
+        <!-- ПРОФИЛЬ -->
+        <div id="view-profile" class="tab-content">
+            <!-- Навигация -->
+
+            
+            <!-- Профиль пользователя -->
+            <div class="max-w-2xl mx-auto p-4">
+                <!-- Информация о пользователе -->
+                
+                
+                <!-- Дерево -->
+                <div id="treeContainer" class="mb-6"></div>
+                
+                <!-- Прогресс-бар -->
+                <div id="progressBar" class="mb-6"></div>
+                
+                <!-- Статистика -->
+                <div id="statsContainer" class="mb-6"></div>
+                
+                <!-- Последние достижения -->
+                <div class="bg-white rounded-lg border p-4">
+                    <h3 class="font-bold text-gray-800 mb-3 flex items-center justify-between">
+                        <span class="flex items-center gap-2">
+                            <span>🏆</span>
+                            <span>Последние достижения</span>
+                        </span>
+                        <button onclick="switchTab('achievements')" class="text-sm text-blue-600 hover:text-blue-800">
+                            Все →
+                        </button>
+                    </h3>
+                    <div id="recentAchievements"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ДОСТИЖЕНИЯ -->
+        <div id="view-achievements" class="tab-content hidden">
+            <!-- Кнопка назад -->
+            <div class="bg-white border-b p-3 mb-4 flex items-center gap-3">
+                <button onclick="switchTab('profile')" class="text-blue-600 hover:text-blue-800">
+                    ← Профиль
+                </button>
+                <h2 class="text-lg font-bold text-gray-800">Достижения</h2>
+            </div>
+            
+            <!-- Общая статистика -->
+            <div class="max-w-4xl mx-auto px-4">
+                <div class="bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 rounded-lg p-6 mb-6 text-white">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-sm opacity-90">Разблокировано достижений</p>
+                            <p class="text-4xl font-bold" id="achievementsProgress">0 / 10</p>
+                        </div>
+                        <div class="text-6xl">🏆</div>
+                    </div>
+                    <div class="mt-4">
+                        <div class="h-3 bg-white bg-opacity-30 rounded-full overflow-hidden">
+                            <div id="achievementsProgressBar" class="h-full bg-white transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Категории достижений -->
+                <div id="achievementCategories" class="space-y-4">
+                    <!-- Категории загружаются динамически -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Модальное окно деталей достижения -->
+        <div id="achievementModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50" onclick="closeAchievementModal()">
+            <div class="bg-white rounded-2xl p-6 max-w-md w-full mx-4" onclick="event.stopPropagation()">
+                <div class="text-center">
+                    <div class="text-6xl mb-3" id="modalAchievementIcon">🏆</div>
+                    <h3 class="text-2xl font-bold text-gray-800 mb-2" id="modalAchievementName">Достижение</h3>
+                    <p class="text-gray-600 mb-4" id="modalAchievementDescription">Описание</p>
+                    
+                    <!-- Награда -->
+                    <div class="bg-gradient-to-r from-yellow-100 to-orange-100 rounded-lg p-3 mb-4">
+                        <p class="text-sm text-gray-600">Награда</p>
+                        <p class="text-xl font-bold text-orange-600" id="modalAchievementReward">+50 XP</p>
+                    </div>
+                    
+                    <!-- Прогресс (только для незавершённых) -->
+                    <div id="modalAchievementProgress" class="hidden mb-4">
+                        <div class="flex justify-between text-sm text-gray-600 mb-1">
+                            <span>Прогресс</span>
+                            <span id="modalProgressText">5 / 10</span>
+                        </div>
+                        <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div id="modalProgressBar" class="h-full bg-gradient-to-r from-green-400 to-blue-500 transition-all duration-500" style="width: 50%"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Дата разблокировки (только для завершённых) -->
+                    <div id="modalAchievementUnlocked" class="hidden text-sm text-gray-500 mb-4">
+                        Разблокировано: <span id="modalUnlockedDate"></span>
+                    </div>
+                </div>
+                
+                <button onclick="closeAchievementModal()" class="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg font-bold hover:from-blue-600 hover:to-purple-700">
+                    Закрыть
+                </button>
+            </div>
+        </div>
         <!-- ========== ВКЛАДКА: ЗАДАЧИ ========== -->
         <div id="view-tasks" class="tab-content">
             <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
@@ -706,6 +866,41 @@
         <!-- ========== ВКЛАДКА: WORKSPACE ========== -->
         <div id="view-workspace" class="tab-content hidden">
 
+
+            <!-- ✅ НАВИГАЦИЯ WORKSPACE -->
+            <div class="bg-white border-b shadow-sm p-3 mb-4">
+                <!-- Кнопка "Назад" и заголовок -->
+                <div class="flex items-center justify-between mb-3">
+                    <button onclick="closeWorkspace()" class="flex items-center gap-2 px-3 py-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors">
+                        <span>←</span>
+                        <span>Назад</span>
+                    </button>
+                    <h2 id="pageTitle" class="font-bold text-gray-800 text-lg"></h2>
+                    <div class="w-20"></div> <!-- Spacer для симметрии -->
+                </div>
+                
+                <!-- Табы workspace -->
+                <div class="flex gap-2 overflow-x-auto pb-2">
+                    <button onclick="switchWorkspaceTab('overview')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="overview">
+                        📊
+                    </button>
+                    <button onclick="switchWorkspaceTab('tasks')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="tasks">
+                        ✅
+                    </button>
+                    <button onclick="switchWorkspaceTab('subprojects')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="subprojects">
+                        📂
+                    </button>
+                    <button onclick="switchWorkspaceTab('roadmap')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="roadmap">
+                        🗺️
+                    </button>
+                    <button onclick="switchWorkspaceTab('notes')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="notes">
+                        📝
+                    </button>
+                    <button onclick="switchWorkspaceTab('members')" class="workspace-tab whitespace-nowrap px-4 py-2 rounded-lg hover:bg-gray-100 transition-colors" data-tab="members">
+                        👥
+                    </button>
+                </div>
+            </div>
             <!-- ========== WORKSPACE: ОБЗОР ========== -->
             <div id="workspace-overview" class="workspace-content">
                 <div class="bg-white rounded-lg shadow-md p-4 sm:p-6 mb-4">
@@ -955,16 +1150,16 @@
                     <!-- Табы подпроекта -->
                     <div class="flex gap-2 border-b mb-4 overflow-x-auto">
                         <button onclick="switchSubprojectTab('data')" id="sp-tab-data" class="sp-tab-btn px-4 py-2 font-medium border-b-2 border-blue-500 text-blue-600">
-                            📝 Данные
+                            📝
                         </button>
                         <button onclick="switchSubprojectTab('tasks')" id="sp-tab-tasks" class="sp-tab-btn px-4 py-2 font-medium border-b-2 border-transparent text-gray-600">
-                            ✅ Задачи
+                            ✅
                         </button>
                         <button onclick="switchSubprojectTab('notes')" id="sp-tab-notes" class="sp-tab-btn px-4 py-2 font-medium border-b-2 border-transparent text-gray-600">
-                            📓 Заметки
+                            📓
                         </button>
                         <button onclick="switchSubprojectTab('tables')" id="sp-tab-tables" class="sp-tab-btn px-4 py-2 font-medium border-b-2 border-transparent text-gray-600">
-                            📊 Таблицы
+                            📊
                         </button>
                     </div>
                     
@@ -1614,6 +1809,9 @@
     <script src="js/settings.js"></script>
     <script src="js/subprojects.js"></script>
     <script src="js/tables.js"></script>
+
+    <script src="js/profile.js"></script>
+    <script src="js/achievements.js"></script>
 
 </body>
 </html>

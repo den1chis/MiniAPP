@@ -9,55 +9,36 @@ async function openSubprojectDetail(subprojectId) {
         const subprojects = await SubprojectAPI.getAll(window.currentProjectId);
         const subproject = subprojects.find(sp => sp.id === subprojectId);
         
-        if (!subproject) return;
+        if (!subproject) {
+            showNotification('Подпроект не найден', 'error');
+            return;
+        }
         
-        // Проверить права доступа
-        // Проверить права доступа
-        const userId = getUserId();
-        const role = await ProjectMemberAPI.getRole(window.currentProjectId, userId);
-        const isOwner = role === 'owner';
-
-        // Для не-владельцев проверить права редактирования
-        const canEdit = isOwner ? true : await MemberPermissionAPI.canAccess(
-            window.currentProjectId, 
-            userId, 
-            'subproject', 
-            subprojectId, 
-            true
-        );
+        // ✅ СКРЫТЬ НАВИГАЦИЮ WORKSPACE
+        const workspaceNav = document.querySelector('#view-workspace > .bg-white.border-b');
+        if (workspaceNav) {
+            workspaceNav.classList.add('hidden');
+        }
+        
         // Скрыть список подпроектов
         document.getElementById('workspace-subprojects').classList.add('hidden');
         
         // Показать детальный вид
         document.getElementById('subproject-detail-view').classList.remove('hidden');
         
-        // Заполнить данные
+        // Установить данные
         document.getElementById('subproject-detail-icon').textContent = subproject.icon || '📁';
         document.getElementById('subproject-detail-name').textContent = subproject.name;
         document.getElementById('subproject-detail-description').textContent = subproject.description || 'Нет описания';
         
-        // Скрыть кнопки редактирования если нет прав
-        if (!canEdit) {
-            // Скрыть все кнопки добавления
-            const addButtons = document.querySelectorAll('#subproject-detail-view button[onclick*="add"], button[onclick*="toggle"]');
-            addButtons.forEach(btn => {
-                if (!btn.onclick || !btn.onclick.toString().includes('close')) {
-                    btn.style.display = 'none';
-                }
-            });
-            
-            // Скрыть кнопку "Изменить"
-            const editBtn = document.querySelector('button[onclick="openEditSubprojectModal()"]');
-            if (editBtn) editBtn.style.display = 'none';
-        } else {
-            // Показать все кнопки
-            const addButtons = document.querySelectorAll('#subproject-detail-view button');
-            addButtons.forEach(btn => btn.style.display = '');
-        }
-        
-        // Загрузить данные
-        switchSubprojectTab('data');
+        // ✅ ЗАГРУЗИТЬ ДАННЫЕ (вместо loadSubprojectData)
         await loadCustomFields();
+        await loadSubprojectTasks();
+        await loadSubprojectNotes();
+        await loadSubprojectTables();
+        
+        // Переключиться на таб "Данные"
+        switchSubprojectTab('data');
         
     } catch (error) {
         console.error('Ошибка открытия подпроекта:', error);
@@ -67,8 +48,22 @@ async function openSubprojectDetail(subprojectId) {
 
 // Закрыть детальный вид подпроекта
 function closeSubprojectDetail() {
+    // ✅ ПОКАЗАТЬ НАВИГАЦИЮ WORKSPACE
+    const workspaceNav = document.querySelector('#view-workspace > .bg-white.border-b');
+    if (workspaceNav) {
+        workspaceNav.classList.remove('hidden');
+    }
+    
+    // Скрыть детальный вид
     document.getElementById('subproject-detail-view').classList.add('hidden');
+    
+    // Показать список подпроектов
     document.getElementById('workspace-subprojects').classList.remove('hidden');
+    
+    // Вернуться на вкладку подпроектов
+    switchWorkspaceTab('subprojects');
+    
+    // Очистить текущий подпроект
     window.currentSubprojectId = null;
 }
 
@@ -239,6 +234,32 @@ async function saveCustomField() {
         console.error('Ошибка добавления поля:', error);
         showNotification('Ошибка добавления поля', 'error');
     }
+
+    try {
+        await CustomFieldAPI.create({
+            subproject_id: window.currentSubprojectId,
+            field_name: name,
+            field_type: type,
+            field_value: value
+        });
+        
+        showNotification('Поле добавлено', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'custom_field_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Поле добавлено');
+            
+            TreeAPI.refreshProfileDebounced();
+            
+        }
+        
+        closeAddFieldModal();
+        await loadCustomFields();
+        
+    } catch (error) {
+        console.error('Ошибка добавления поля:', error);
+    }
 }
 
 // Удалить кастомное поле
@@ -398,9 +419,25 @@ async function addSubprojectTask() {
         });
         
         input.value = '';
-        document.getElementById('spTaskDeadline').value = '';
+        const deadlineInput = document.getElementById('spTaskDeadline');
+        if (deadlineInput) {
+            deadlineInput.value = '';
+        }
         
         showNotification('Задача добавлена', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP (задача в подпроекте = обычная задача)
+        const result = await TreeAPI.addXP(userId, 'task_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Задача создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
         await loadSubprojectTasks();
         toggleSpTaskForm();
         
@@ -471,8 +508,16 @@ async function addSubprojectNote() {
     const input = document.getElementById('spNewNoteInput');
     const content = input.value.trim();
     
+    console.log('🔍 Создание заметки в подпроекте:', window.currentSubprojectId); // ← ОТЛАДКА
+    
     if (!content) {
         showNotification('Введите текст заметки', 'error');
+        return;
+    }
+    
+    if (!window.currentSubprojectId) {
+        showNotification('Подпроект не выбран', 'error');
+        console.error('❌ currentSubprojectId не установлен');
         return;
     }
     
@@ -485,12 +530,17 @@ async function addSubprojectNote() {
         
         if (!subproject) {
             showNotification('Подпроект не найден', 'error');
+            console.error('❌ Подпроект не найден в списке');
             return;
         }
+        
+        console.log('✅ Подпроект найден:', subproject);
         
         // Проверить права
         const role = await ProjectMemberAPI.getRole(subproject.project_id, userId);
         const isOwner = role === 'owner';
+        
+        console.log('👤 Роль пользователя:', role, 'isOwner:', isOwner);
         
         if (!isOwner) {
             const canEdit = await MemberPermissionAPI.canAccess(
@@ -498,8 +548,10 @@ async function addSubprojectNote() {
                 userId, 
                 'subproject', 
                 window.currentSubprojectId, 
-                true // needEdit = true
+                true
             );
+            
+            console.log('🔐 Права на редактирование:', canEdit);
             
             if (!canEdit) {
                 showNotification('У вас нет прав на добавление заметок', 'error');
@@ -507,19 +559,36 @@ async function addSubprojectNote() {
             }
         }
         
+        console.log('📝 Создаём заметку...');
+        
         await SubprojectNoteAPI.create({
             subproject_id: window.currentSubprojectId,
             content
         });
         
+        console.log('✅ Заметка создана');
+        
         input.value = '';
         showNotification('Заметка добавлена', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(userId, 'subproject_note_created');
+        if (result) {
+            showXPNotification(result.totalXP, 'Заметка подпроекта создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            TreeAPI.refreshProfileDebounced();
+        }
+        
         await loadSubprojectNotes();
         toggleSpNoteForm();
         
     } catch (error) {
-        console.error('Ошибка добавления заметки:', error);
-        showNotification('Ошибка добавления заметки', 'error');
+        console.error('❌ Ошибка добавления заметки:', error);
+        showNotification('Ошибка добавления заметки: ' + error.message, 'error');
     }
 }
 // Удалить заметку подпроекта

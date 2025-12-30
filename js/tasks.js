@@ -481,24 +481,29 @@ function toggleTaskGroup(groupId) {
 // Добавить задачу
 // Добавить задачу
 async function addTask() {
-    const input = document.getElementById('newTaskInput');
-    const title = input.value.trim();
-    
-    if (!title) {
-        showNotification('Введите название задачи', 'error');
-        return;
-    }
-    
-    const projectId = document.getElementById('taskProject')?.value || null;
-    const priority = document.getElementById('taskPriority')?.value || 'medium';
-    let deadline = document.getElementById('taskDeadline')?.value || null;
-    
-    // Установить время 23:59:59 для дедлайна
-    if (deadline) {
-        deadline = setEndOfDay(deadline);
-    }
+    // Защита от двойного клика
+    if (window.addingTask) return;
+    window.addingTask = true;
     
     try {
+        const input = document.getElementById('newTaskInput');
+        const title = input.value.trim();
+        
+        if (!title) {
+            showNotification('Введите название задачи', 'error');
+            return;
+        }
+        
+        const projectId = document.getElementById('taskProject')?.value || null;
+        const priority = document.getElementById('taskPriority')?.value || 'medium';
+        let deadline = document.getElementById('taskDeadline')?.value || null;
+        
+        // Установить время 23:59:59 для дедлайна
+        if (deadline) {
+            deadline = setEndOfDay(deadline);
+        }
+        
+        // Создать задачу (ОДИН РАЗ!)
         await TaskAPI.create({
             title,
             project_id: projectId ? parseInt(projectId) : null,
@@ -508,16 +513,42 @@ async function addTask() {
             completed: false
         });
         
+        // Очистить форму
         input.value = '';
-        document.getElementById('taskDeadline').value = '';
+        const deadlineInput = document.getElementById('taskDeadline');
+        if (deadlineInput) {
+            deadlineInput.value = '';
+        }
         
         showNotification('Задача добавлена', 'success');
+        
+        // ✅ НАЧИСЛИТЬ XP
+        const result = await TreeAPI.addXP(getUserId(), 'task_created');
+        console.log('🔍 Результат addXP:', result);
+        
+        if (result) {
+            console.log('🔍 Вызываем showXPNotification с:', result.totalXP);
+            showXPNotification(result.totalXP, 'Задача создана');
+            
+            if (result.leveledUp) {
+                showLevelUpNotification(result.newLevel);
+            }
+            
+            // Обновить профиль если открыт
+            TreeAPI.refreshProfileDebounced();
+        }
+        
+        // Обновить список задач
         await loadTasks();
         
+        // Закрыть форму
         toggleTaskForm();
+        
     } catch (error) {
         console.error('Ошибка добавления задачи:', error);
         showNotification('Ошибка добавления задачи', 'error');
+    } finally {
+        window.addingTask = false; // Снять блокировку
     }
 }
 
@@ -550,24 +581,53 @@ async function toggleTask(id) {
     try {
         const tasks = await TaskAPI.getAll();
         const task = tasks.find(t => t.id === id);
-        
         if (!task) return;
         
-        await TaskAPI.update(id, { 
-            completed: !task.completed,
-            completed_at: !task.completed ? new Date().toISOString() : null
-        });
+        const newCompleted = !task.completed;
         
-        hapticFeedback('light');
-        await loadTasks();
-    } catch (error) {
-        console.error('Ошибка переключения задачи:', error);
-        if (error.type !== 'CONFLICT') {
-            showNotification('Ошибка обновления задачи', 'error');
+        await TaskAPI.update(id, { completed: newCompleted });
+        
+        // ✅ НАЧИСЛИТЬ XP ПРИ ВЫПОЛНЕНИИ
+        if (newCompleted) {
+            let extraXP = 0;
+            
+            // Бонус за выполнение в срок
+            if (task.deadline) {
+                const deadline = new Date(task.deadline);
+                const now = new Date();
+                if (now <= deadline) {
+                    extraXP += 3;
+                }
+            }
+            
+            // Бонус за высокий приоритет
+            if (task.priority === 'high') {
+                extraXP += 2;
+            }
+            
+            const result = await TreeAPI.addXP(getUserId(), 'task_completed', extraXP);
+            if (result) {
+                const message = extraXP > 0 
+                    ? `Задача выполнена! +${extraXP} бонус` 
+                    : 'Задача выполнена';
+                showXPNotification(result.totalXP, message);
+                
+                if (result.leveledUp) {
+                    showLevelUpNotification(result.newLevel);
+                }
+                
+                // Обновить профиль
+                TreeAPI.refreshProfileDebounced();
+            }
         }
+        
+        await loadTasks();
+        
+    } catch (error) {
+        console.error('Ошибка выполнения задачи:', error);
+        showNotification('Ошибка выполнения задачи', 'error');
     }
 }
-
 // Удалить задачу
 async function deleteTask(id) {
     if (!confirm('Удалить задачу?')) return;

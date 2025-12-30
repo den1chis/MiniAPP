@@ -9,14 +9,27 @@ function switchTab(tab) {
         el.classList.add('bg-gray-100', 'text-gray-600');
     });
     
-    document.getElementById(`view-${tab}`).classList.remove('hidden');
-    document.getElementById(`tab-${tab}`).classList.remove('bg-gray-100', 'text-gray-600');
-    document.getElementById(`tab-${tab}`).classList.add('bg-blue-500', 'text-white');
+    const viewEl = document.getElementById(`view-${tab}`);
+    if (viewEl) {
+        viewEl.classList.remove('hidden');
+    }
     
-    document.getElementById('workspaceTabs').classList.add('hidden');
-    document.getElementById('backBtn').classList.add('hidden');
-    document.getElementById('pageTitle').textContent = 'Планировщик';
+    const tabEl = document.getElementById(`tab-${tab}`);
+    if (tabEl) {
+        tabEl.classList.remove('bg-gray-100', 'text-gray-600');
+        tabEl.classList.add('bg-blue-500', 'text-white');
+    }
     
+    document.getElementById('workspaceTabs')?.classList.add('hidden');
+    document.getElementById('backBtn')?.classList.add('hidden');
+    
+    const pageTitle = document.getElementById('pageTitle');
+    if (pageTitle) {
+        pageTitle.textContent = 'Планировщик';
+    }
+    
+    // Загрузить данные вкладки
+    if (tab === 'profile') loadProfile();
     if (tab === 'tasks') loadTasks();
     if (tab === 'kanban') loadKanban();
     if (tab === 'dashboard') loadDashboard();
@@ -24,6 +37,7 @@ function switchTab(tab) {
     if (tab === 'projects') loadProjects();
     if (tab === 'notes') loadNotes();
     if (tab === 'settings') checkUpcomingDeadlines();
+    if (tab === 'achievements') loadAchievements();
 }
 
 function switchWorkspaceTab(wsTab) {
@@ -35,9 +49,12 @@ function switchWorkspaceTab(wsTab) {
         el.classList.add('bg-gray-100', 'text-gray-600');
     });
     
-    document.getElementById(`workspace-${wsTab}`).classList.remove('hidden');
-    document.getElementById(`ws-tab-${wsTab}`).classList.remove('bg-gray-100', 'text-gray-600');
-    document.getElementById(`ws-tab-${wsTab}`).classList.add('bg-blue-500', 'text-white');
+    document.getElementById(`workspace-${wsTab}`)?.classList.remove('hidden');
+    const wsTabBtn = document.getElementById(`ws-tab-${wsTab}`);
+    if (wsTabBtn) {
+        wsTabBtn.classList.remove('bg-gray-100', 'text-gray-600');
+        wsTabBtn.classList.add('bg-blue-500', 'text-white');
+    }
     
     if (wsTab === 'overview') loadWorkspaceOverview();
     if (wsTab === 'tasks') loadWorkspaceTasks();
@@ -49,20 +66,18 @@ function switchWorkspaceTab(wsTab) {
 function openProject(projectId) {
     currentProject = projectId;
 
-    document.getElementById('mainTabs').classList.add('hidden');
+    document.getElementById('mainTabs')?.classList.add('hidden');
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
 
-    document.getElementById('view-workspace').classList.remove('hidden'); // ← КЛЮЧ
-    document.getElementById('workspaceTabs').classList.remove('hidden');
-    document.getElementById('workspaceTabs').classList.add('flex');
-    document.getElementById('backBtn').classList.remove('hidden');
+    document.getElementById('view-workspace')?.classList.remove('hidden');
+    document.getElementById('workspaceTabs')?.classList.remove('hidden');
+    document.getElementById('workspaceTabs')?.classList.add('flex');
+    document.getElementById('backBtn')?.classList.remove('hidden');
 
     loadProjectDetail();
     switchWorkspaceTab('overview');
 }
 
-
-// Вернуться назад
 function goBack() {
     // Если открыт подпроект - вернуться к списку подпроектов
     if (window.currentSubprojectId) {
@@ -72,28 +87,19 @@ function goBack() {
     
     // Если открыт workspace - вернуться к проектам
     if (window.currentProjectId) {
-        // Скрыть workspace
-        document.getElementById('view-workspace').classList.add('hidden');
+        document.getElementById('view-workspace')?.classList.add('hidden');
+        document.getElementById('view-projects')?.classList.remove('hidden');
+        document.getElementById('workspaceTabs')?.classList.add('hidden');
+        document.getElementById('workspaceTabs')?.classList.remove('flex');
+        document.getElementById('mainTabs')?.classList.remove('hidden');
+        document.getElementById('backBtn')?.classList.add('hidden');
         
-        // Показать вкладку проектов
-        document.getElementById('view-projects').classList.remove('hidden');
+        const pageTitle = document.getElementById('pageTitle');
+        if (pageTitle) {
+            pageTitle.textContent = 'Планировщик';
+        }
         
-        // Скрыть табы workspace
-        document.getElementById('workspaceTabs').classList.add('hidden');
-        document.getElementById('workspaceTabs').classList.remove('flex');
-        
-        // Показать главные табы
-        document.getElementById('mainTabs').classList.remove('hidden');
-        
-        // Скрыть кнопку "Назад"
-        document.getElementById('backBtn').classList.add('hidden');
-        
-        // Сбросить заголовок
-        document.getElementById('pageTitle').textContent = 'Планировщик';
-        
-        // Активировать таб "Проекты"
         switchTab('projects');
-        
         window.currentProjectId = null;
     }
 }
