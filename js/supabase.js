@@ -1120,11 +1120,12 @@ const TreeAPI = {
     },
     
     // Получить статистику (С КЕШИРОВАНИЕМ)
+    // Получить статистику (с кешированием)
     async getStats(userId) {
         try {
             const now = Date.now();
             
-            // ✅ ВЕРНУТЬ КЕШ ЕСЛИ СВЕЖИЙ
+            // Вернуть кеш если свежий
             if (this._statsCache && 
                 this._statsCache.user_id === userId && 
                 now - this._statsCacheTime < this._statsCacheTimeout) {
@@ -1138,13 +1139,16 @@ const TreeAPI = {
                 .eq('user_id', userId)
                 .single();
             
+            // ❌ ЕСЛИ ОШИБКА 404 - НЕ ВЫЗЫВАТЬ initStats!
             if (error && error.code === 'PGRST116') {
-                data = await this.initStats(userId);
+                // Вернуть null - loadProfile сам создаст с пересчётом
+                console.log('⚠️ Статистика не найдена, вернём null');
+                return null;
             } else if (error) {
                 throw error;
             }
             
-            // ✅ СОХРАНИТЬ В КЕШ
+            // Сохранить в кеш
             this._statsCache = data;
             this._statsCacheTime = now;
             

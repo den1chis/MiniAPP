@@ -6,15 +6,13 @@ let userStats = null;
 async function loadProfile() {
     try {
         const userId = getUserId();
-        
-        // ✅ ПОПЫТКА ЗАГРУЗИТЬ СТАТИСТИКУ
-        let userStats = null;
         let isNewUser = false;
         
-        try {
-            userStats = await TreeAPI.getStats(userId);
-        } catch (error) {
-            // Статистики нет — создать с пересчётом реальных данных
+        // ✅ ПОПЫТКА ЗАГРУЗИТЬ СТАТИСТИКУ
+        let userStats = await TreeAPI.getStats(userId);
+        
+        // ❌ ЕСЛИ NULL - СОЗДАТЬ С ПЕРЕСЧЁТОМ
+        if (!userStats) {
             console.log('📊 Статистика не найдена, создаём с пересчётом реальных данных...');
             isNewUser = true;
             
