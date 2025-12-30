@@ -7,64 +7,133 @@ async function loadProfile() {
     try {
         const userId = getUserId();
         
-        // Загрузить статистику
-        userStats = await TreeAPI.getStats(userId);
+        // ✅ ПОПЫТКА ЗАГРУЗИТЬ СТАТИСТИКУ
+        let userStats = null;
+        let isNewUser = false;
+        
+        try {
+            userStats = await TreeAPI.getStats(userId);
+        } catch (error) {
+            // Статистики нет — создать с пересчётом реальных данных
+            console.log('📊 Статистика не найдена, создаём с пересчётом реальных данных...');
+            isNewUser = true;
+            
+            try {
+                // Получить реальные данные пользователя
+                const { data: tasks } = await supabaseClient.from('tasks').select('*').eq('user_id', userId);
+                const { data: projects } = await supabaseClient.from('projects').select('*').eq('user_id', userId);
+                const { data: notes } = await supabaseClient.from('notes').select('*').eq('user_id', userId);
+                const { data: subprojects } = await supabaseClient.from('subprojects').select('*');
+                const { data: tables } = await supabaseClient.from('sp_tables').select('*');
+                
+                // Фильтровать подпроекты по user_id через projects
+                const userProjectIds = projects?.map(p => p.id) || [];
+                const userSubprojects = subprojects?.filter(sp => userProjectIds.includes(sp.project_id)) || [];
+                
+                // Посчитать статистику
+                const tasksCreated = tasks?.length || 0;
+                const tasksCompleted = tasks?.filter(t => t.completed).length || 0;
+                const projectsCreated = projects?.length || 0;
+                const notesCreated = notes?.length || 0;
+                const subprojectsCreated = userSubprojects.length;
+                const tablesCreated = tables?.filter(t => userSubprojects.some(sp => sp.id === t.subproject_id)).length || 0;
+                
+                // Рассчитать XP
+                const calculatedXP = 
+                    (tasksCreated * 2) +
+                    (tasksCompleted * 5) +
+                    (projectsCreated * 10) +
+                    (notesCreated * 3) +
+                    (subprojectsCreated * 8) +
+                    (tablesCreated * 8);
+                
+                const calculatedLevel = TreeAPI.calculateLevel(calculatedXP);
+                
+                console.log(`💎 Рассчитанный XP: ${calculatedXP}, Уровень: ${calculatedLevel}`);
+                console.log(`   Задачи: ${tasksCreated} создано, ${tasksCompleted} выполнено`);
+                console.log(`   Проекты: ${projectsCreated}, Заметки: ${notesCreated}`);
+                
+                // Создать статистику с пересчитанными значениями
+                const { data: newStats, error: insertError } = await supabaseClient
+                    .from('user_tree_stats')
+                    .insert([{
+                        user_id: userId,
+                        total_xp: calculatedXP,
+                        tree_level: calculatedLevel,
+                        current_streak: 1,
+                        max_streak: 1,
+                        tasks_created: tasksCreated,
+                        tasks_completed: tasksCompleted,
+                        projects_created: projectsCreated,
+                        notes_created: notesCreated,
+                        subprojects_created: subprojectsCreated,
+                        tables_created: tablesCreated,
+                        achievements_migrated: false
+                    }])
+                    .select()
+                    .single();
+                
+                if (insertError) throw insertError;
+                
+                userStats = newStats;
+                console.log('✅ Статистика создана с пересчётом:', userStats);
+                
+            } catch (createError) {
+                console.error('❌ Ошибка создания статистики:', createError);
+                throw createError;
+            }
+        }
         
         // ✅ МИГРАЦИЯ: Пересчитать достижения для существующих пользователей
-        // ✅ МИГРАЦИЯ: Пересчитать достижения для существующих пользователей
-        // ✅ МИГРАЦИЯ: Пересчитать достижения для существующих пользователей
-        // ✅ МИГРАЦИЯ: Пересчитать XP и достижения
-        // ✅ МИГРАЦИЯ: Пересчитать XP и достижения
         if (!userStats.achievements_migrated) {
             console.log('🔄 Запуск миграции достижений для пользователя:', userId);
             
             try {
                 const xpBefore = userStats.total_xp;
                 
-                // 💎 ПЕРЕСЧИТАТЬ XP ПО СТАТИСТИКЕ
-                const calculatedXP = 
-                    (userStats.tasks_created || 0) * 2 +
-                    (userStats.tasks_completed || 0) * 5 +
-                    (userStats.tasks_edited || 0) * 1 +
-                    (userStats.projects_created || 0) * 10 +
-                    (userStats.subprojects_created || 0) * 8 +
-                    (userStats.notes_created || 0) * 3 +
-                    (userStats.tables_created || 0) * 8 +
-                    (userStats.table_rows_created || 0) * 1 +
-                    (userStats.members_invited || 0) * 10 +
-                    (userStats.custom_fields_created || 0) * 3;
-                
-                console.log('💎 Пересчёт XP:');
-                console.log(`   Текущий: ${xpBefore}`);
-                console.log(`   Рассчитанный по статистике: ${calculatedXP}`);
-                
-                let finalXP = xpBefore;
-                
-                // ✅ ОБНОВИТЬ XP И УРОВЕНЬ
-                if (calculatedXP > xpBefore) {
-                    const newLevel = TreeAPI.calculateLevel(calculatedXP);
+                // 💎 ПЕРЕСЧИТАТЬ XP ПО СТАТИСТИКЕ (для старых пользователей)
+                if (!isNewUser) {
+                    const calculatedXP = 
+                        (userStats.tasks_created || 0) * 2 +
+                        (userStats.tasks_completed || 0) * 5 +
+                        (userStats.tasks_edited || 0) * 1 +
+                        (userStats.projects_created || 0) * 10 +
+                        (userStats.subprojects_created || 0) * 8 +
+                        (userStats.notes_created || 0) * 3 +
+                        (userStats.tables_created || 0) * 8 +
+                        (userStats.table_rows_created || 0) * 1 +
+                        (userStats.members_invited || 0) * 10 +
+                        (userStats.custom_fields_created || 0) * 3;
                     
-                    await supabaseClient
-                        .from('user_tree_stats')
-                        .update({ 
-                            total_xp: calculatedXP,
-                            tree_level: newLevel  // ← ОБНОВИТЬ УРОВЕНЬ!
-                        })
-                        .eq('user_id', userId);
+                    console.log('💎 Пересчёт XP:');
+                    console.log(`   Текущий: ${xpBefore}`);
+                    console.log(`   Рассчитанный по статистике: ${calculatedXP}`);
                     
-                    finalXP = calculatedXP;
-                    console.log(`   ✅ XP обновлён: ${xpBefore} → ${calculatedXP} (+${calculatedXP - xpBefore})`);
-                    console.log(`   🌳 Уровень дерева: ${newLevel}`);
-                } else {
-                    console.log(`   ✅ XP остался прежним`);
+                    // ✅ ОБНОВИТЬ XP И УРОВЕНЬ если пересчитанный больше
+                    if (calculatedXP > xpBefore) {
+                        const newLevel = TreeAPI.calculateLevel(calculatedXP);
+                        
+                        await supabaseClient
+                            .from('user_tree_stats')
+                            .update({ 
+                                total_xp: calculatedXP,
+                                tree_level: newLevel
+                            })
+                            .eq('user_id', userId);
+                        
+                        console.log(`   ✅ XP обновлён: ${xpBefore} → ${calculatedXP} (+${calculatedXP - xpBefore})`);
+                        console.log(`   🌳 Уровень дерева: ${newLevel}`);
+                    } else {
+                        console.log(`   ✅ XP остался прежним`);
+                    }
                 }
                 
-                // 🏆 РАЗБЛОКИРОВАТЬ ДОСТИЖЕНИЯ
+                // 🏆 РАЗБЛОКИРОВАТЬ ДОСТИЖЕНИЯ (БЕЗ начисления XP)
                 window.suppressAchievementNotifications = true;
                 await TreeAPI.checkAchievements(userId, true);
                 window.suppressAchievementNotifications = false;
                 
-                // 🚩 УСТАНОВИТЬ ФЛАГ
+                // 🚩 УСТАНОВИТЬ ФЛАГ МИГРАЦИИ
                 await supabaseClient
                     .from('user_tree_stats')
                     .update({ achievements_migrated: true })
@@ -77,27 +146,14 @@ async function loadProfile() {
                 console.log(`   Итоговый XP: ${userStats.total_xp}`);
                 console.log(`   Уровень дерева: ${userStats.tree_level}`);
                 
-                // ✅ ПЕРЕРИСОВАТЬ ДЕРЕВО И ИНТЕРФЕЙС
-                renderTree(userStats.tree_level);          // ← ОБНОВИТЬ ДЕРЕВО
-                renderProfileInfo(userStats);              // ← ОБНОВИТЬ XP
-                renderProgress(userStats);                 // ← ОБНОВИТЬ ПРОГРЕСС-БАР
-                renderStats(userStats);                    // ← ОБНОВИТЬ СТАТИСТИКУ
-                await loadRecentAchievements(userId);      // ← ЗАГРУЗИТЬ ДОСТИЖЕНИЯ
-                
                 // Показать уведомление
-                const xpGained = finalXP - xpBefore;
-                if (xpGained > 0) {
-                    showNotification(`🎉 Прогресс пересчитан! +${xpGained} XP`, 'success');
-                    
-                    // Показать уведомление о левел-апе если был
-                    const oldLevel = TreeAPI.calculateLevel(xpBefore);
-                    if (userStats.tree_level > oldLevel) {
-                        setTimeout(() => {
-                            showLevelUpNotification(userStats.tree_level);
-                        }, 1000);
+                if (!isNewUser) {
+                    const xpGained = userStats.total_xp - xpBefore;
+                    if (xpGained > 0) {
+                        showNotification(`🎉 Прогресс пересчитан! +${xpGained} XP`, 'success');
+                    } else {
+                        showNotification('🎉 Достижения обновлены!', 'success');
                     }
-                } else {
-                    showNotification('🎉 Достижения обновлены!', 'success');
                 }
                 
             } catch (error) {
@@ -106,19 +162,11 @@ async function loadProfile() {
             }
         }
         
-        // Отобразить дерево
+        // ✅ ОТОБРАЗИТЬ ВСЁ
         renderTree(userStats.tree_level);
-        
-        // Отобразить информацию
         renderProfileInfo(userStats);
-        
-        // Отобразить прогресс
         renderProgress(userStats);
-        
-        // Отобразить статистику
         renderStats(userStats);
-        
-        // Загрузить последние достижения
         await loadRecentAchievements(userId);
         
     } catch (error) {
