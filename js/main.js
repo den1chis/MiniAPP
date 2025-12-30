@@ -19,10 +19,18 @@ if (tg) {
     
     const user = tg.initDataUnsafe?.user;
     if (user) {
-        document.getElementById('userInfo').textContent = `${user.first_name} (ID: ${user.id})`;
+        // ✅ ИСПРАВЛЕНО: использовать userId вместо userInfo
+        const userIdElement = document.getElementById('userId');
+        if (userIdElement) {
+            userIdElement.textContent = user.id;
+        }
     }
 } else {
-    document.getElementById('userInfo').textContent = 'Локальный режим';
+    // Локальный режим
+    const userIdElement = document.getElementById('userId');
+    if (userIdElement) {
+        userIdElement.textContent = 'demo';
+    }
 }
 
 function getInitData() {
